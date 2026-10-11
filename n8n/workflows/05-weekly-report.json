@@ -1,0 +1,537 @@
+{
+  "id": "ppWeeklyReport01",
+  "name": "PostPilot – Weekly report",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PostPilot – Weekly report\nTwo ways to start: **every Monday at 08:00**, or the **Generate report** button in the app.\nWe collect last week's posts and their numbers (Facebook Graph API, or fake numbers in Mock mode; LinkedIn has no free statistics), then the AI writes a short plain-English report.",
+        "width": 720,
+        "height": 280,
+        "color": 4
+      },
+      "id": "dcc20583-fecf-d3d0-d32e-06a6d5bb74ca",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "3c52c10e-02a3-572a-6acd-f80da7f9a664",
+      "name": "Every Monday at 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "postpilot-report",
+        "options": {}
+      },
+      "id": "c21df3fd-fe17-8883-dc36-d52959a320f7",
+      "name": "Report button pressed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        440
+      ],
+      "webhookId": "1a2de6a7-4e4b-e3fb-aec1-37d4577a6874"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ebd88006-9e9a-07e7-fe92-af0f7098f2f6",
+              "leftValue": "={{ $('Report button pressed').item.json.headers['x-postpilot-secret'] === $env.POSTPILOT_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "35daa34e-0ffe-e343-d5e6-ef8ffd8b33c8",
+      "name": "Is this our app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/report-data",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "bebffb2e-2477-31dd-b0b8-3c06a4b2cddb",
+      "name": "Get posts of the last 7 days",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const posts = $input.first().json.posts.filter((p) => p.needsFacebookStats);\nreturn posts.length ? posts.map((p) => ({ json: p })) : [{ json: { none: true } }];"
+      },
+      "id": "38e3e54d-f1ae-bb04-1ba2-183f4a14bf61",
+      "name": "Posts needing Facebook numbers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0f0386f1-760d-ff95-ddf6-3ff26aa6d503",
+              "leftValue": "={{ !$json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1aae4981-07f7-2342-331e-33ae033e0808",
+      "name": "Real Facebook post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $json.externalId }}?fields=reactions.summary(total_count),comments.summary(total_count),shares&access_token={{ $env.FB_PAGE_TOKEN }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1d4f4cee-78e4-b29f-412b-a086aff6ee1f",
+      "name": "Get Facebook numbers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $(\"Get posts of the last 7 days\").first().json;\nconst real = {};\ntry {\n  for (const it of $(\"Get Facebook numbers\").all()) {\n    const j = it.json;\n    if (j.id) real[j.id] = { likes: j.reactions?.summary?.total_count ?? 0, comments: j.comments?.summary?.total_count ?? 0, shares: j.shares?.count ?? 0, reach: 0 };\n  }\n} catch (e) { /* no real Facebook posts this week */ }\nconst posts = data.posts.map((p) => {\n  const n = p.mock ? p.engagement : real[p.externalId] ?? null;\n  const stats = p.mock ? \"mock\" : p.platform === \"linkedin\" ? \"not available\" : n ? \"facebook\" : \"not available\";\n  return { title: p.title, platform: p.platform, status: p.status, excerpt: p.excerpt, stats, likes: n?.likes ?? 0, comments: n?.comments ?? 0, shares: n?.shares ?? 0, reach: n?.reach ?? 0 };\n});\nconst totals = posts.reduce((t, p) => ({ likes: t.likes + p.likes, comments: t.comments + p.comments, shares: t.shares + p.shares }), { likes: 0, comments: 0, shares: 0 });\nreturn [{ json: { settings: data.settings, periodStart: data.periodStart, periodEnd: data.periodEnd, posts, totals } }];"
+      },
+      "id": "46034df1-658e-d567-542b-9a74e80043f6",
+      "name": "Combine all numbers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/prompts",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "d08f4cc6-3574-9f08-3a2a-8da7134ef3b5",
+      "name": "Load prompts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Combine all numbers').item.json.settings.model, messages: [{ role: 'system', content: $json.prompts.report }, { role: 'user', content: 'Numbers for the week:\\n' + JSON.stringify({ posts: $('Combine all numbers').item.json.posts, totals: $('Combine all numbers').item.json.totals }, null, 2) }], response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "a285a988-6d46-869f-2220-dd916ecb595f",
+      "name": "Write report with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $(\"Combine all numbers\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst t = ctx.totals;\n// Plain summary if the AI is unavailable\nconst fallback = \"This week: \" + ctx.posts.length + \" post(s), \" + t.likes + \" likes, \" + t.comments + \" comments, \" + t.shares + \" shares. LinkedIn statistics are not available.\";\nreturn {\n  json: {\n    title: p?.title || \"Weekly social media report\",\n    text: p?.report || fallback,\n    numbers: { posts: ctx.posts, totals: t },\n    periodStart: ctx.periodStart,\n    periodEnd: ctx.periodEnd,\n    cost: $json.usage?.cost ?? 0,\n    telegram: !!ctx.settings.telegram,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "6a5dcac6-934c-8348-d03a-63455216ee6e",
+      "name": "Read the report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/reports",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, text: $json.text, numbers: $json.numbers, periodStart: $json.periodStart, periodEnd: $json.periodEnd, cost: $json.cost }) }}"
+      },
+      "id": "fa91dfa5-873f-3837-7376-97a2f42fd04b",
+      "name": "Save report in app",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5cc913c-f154-87c5-bead-a09de470896a",
+              "leftValue": "={{ $('Read the report').item.json.telegram }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d446b150-1f29-9628-a774-d5fd98259078",
+      "name": "Telegram on?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=📊 {{ $('Read the report').item.json.title }}\n\n{{ $('Read the report').item.json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "03cc8a3b-7236-2fb4-24ce-920c8f9b8d8e",
+      "name": "Send report to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2640,
+        220
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ppTelegramCred01",
+          "name": "PostPilot Telegram bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every Monday at 08:00": {
+      "main": [
+        [
+          {
+            "node": "Get posts of the last 7 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report button pressed": {
+      "main": [
+        [
+          {
+            "node": "Is this our app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this our app?": {
+      "main": [
+        [
+          {
+            "node": "Get posts of the last 7 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real Facebook post?": {
+      "main": [
+        [
+          {
+            "node": "Get Facebook numbers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combine all numbers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get posts of the last 7 days": {
+      "main": [
+        [
+          {
+            "node": "Posts needing Facebook numbers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Posts needing Facebook numbers": {
+      "main": [
+        [
+          {
+            "node": "Real Facebook post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Facebook numbers": {
+      "main": [
+        [
+          {
+            "node": "Combine all numbers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine all numbers": {
+      "main": [
+        [
+          {
+            "node": "Load prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load prompts": {
+      "main": [
+        [
+          {
+            "node": "Write report with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write report with AI": {
+      "main": [
+        [
+          {
+            "node": "Read the report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the report": {
+      "main": [
+        [
+          {
+            "node": "Save report in app",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save report in app": {
+      "main": [
+        [
+          {
+            "node": "Telegram on?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram on?": {
+      "main": [
+        [
+          {
+            "node": "Send report to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "timezone": "Africa/Douala"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false
+}

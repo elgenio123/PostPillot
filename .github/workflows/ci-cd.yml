@@ -1,0 +1,283 @@
+# PostPilot CI/CD: setup → build → test → bootstrap (only on a fresh server) → deploy → smoke test.
+# Pull requests stop after build + test. Deployment runs on pushes to main once the server secrets exist
+# (see docs/deployment.md). Without them the deploy stages are skipped, so CI still passes.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full_smoke:
+        description: "Run the full agent flow in the smoke test (uses a few cents of OpenRouter credit)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: postpilot-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  APP_DIR: /opt/postpilot
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      web_image: ${{ steps.meta.outputs.web_image }}
+      n8n_image: ${{ steps.meta.outputs.n8n_image }}
+      push: ${{ steps.meta.outputs.push }}
+      deploy: ${{ steps.meta.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out image names and what to run
+        id: meta
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          PROD_ENV: ${{ secrets.PROD_ENV }}
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "web_image=$REGISTRY/$owner/postpilot-web" >> "$GITHUB_OUTPUT"
+          echo "n8n_image=$REGISTRY/$owner/postpilot-n8n" >> "$GITHUB_OUTPUT"
+          push=false
+          [ "${{ github.event_name }}" != "pull_request" ] && push=true
+          echo "push=$push" >> "$GITHUB_OUTPUT"
+          deploy=false
+          if [ "$push" = true ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            if [ -n "$SSH_HOST" ] && [ -n "$SSH_USER" ] && [ -n "$SSH_PRIVATE_KEY" ] && [ -n "$PROD_ENV" ]; then
+              deploy=true
+            else
+              echo "::notice title=Deployment skipped::Add SSH_HOST, SSH_USER, SSH_PRIVATE_KEY and PROD_ENV secrets to deploy (docs/deployment.md)."
+            fi
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check the n8n workflow files match their builder
+        run: |
+          node scripts/build-workflows.mjs
+          git diff --exit-code -- n8n/workflows || { echo "::error::Run 'node scripts/build-workflows.mjs' and commit n8n/workflows"; exit 1; }
+
+      - name: Validate the Compose files
+        env:
+          POSTGRES_PASSWORD: ci
+          WEB_IMAGE: web
+          N8N_IMAGE: n8n
+          N8N_WEBHOOK_URL: http://localhost:5678/
+        run: |
+          touch .env deploy/.env
+          docker compose -f docker-compose.yml config -q
+          docker compose -f deploy/docker-compose.prod.yml config -q
+
+  build:
+    name: Build (${{ matrix.image }})
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: web
+            dockerfile: web/Dockerfile
+          - image: n8n
+            dockerfile: n8n/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: needs.setup.outputs.push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # amd64 for Azure, arm64 for Oracle Ampere; pull requests only check the amd64 build
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ needs.setup.outputs.push == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ needs.setup.outputs.push == 'true' }}
+          tags: |
+            ${{ matrix.image == 'web' && needs.setup.outputs.web_image || needs.setup.outputs.n8n_image }}:${{ github.sha }}
+            ${{ matrix.image == 'web' && needs.setup.outputs.web_image || needs.setup.outputs.n8n_image }}:latest
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  test:
+    name: Test
+    needs: setup
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postpilot
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: postpilot_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postpilot -d postpilot_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Type check
+        run: npm run typecheck
+      - name: API tests
+        env:
+          TEST_DATABASE_URL: postgres://postpilot:test@localhost:5432/postpilot_test
+        run: npm test
+
+  bootstrap:
+    name: Bootstrap server (only if needed)
+    needs: [setup, build, test]
+    if: needs.setup.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -T 20 -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Is the server already prepared?
+        id: check
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          if ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "test -f $APP_DIR/.bootstrapped && command -v docker >/dev/null"; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Bootstrap::Server already prepared, nothing to do."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Docker, swap and firewall rules
+        if: steps.check.outputs.needed == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          scp -i ~/.ssh/id_deploy deploy/bootstrap.sh "$SSH_USER@$SSH_HOST:/tmp/postpilot-bootstrap.sh"
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "sudo sh /tmp/postpilot-bootstrap.sh $SSH_USER && rm /tmp/postpilot-bootstrap.sh"
+
+  deploy:
+    name: Deploy
+    needs: [setup, bootstrap]
+    if: needs.setup.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -T 20 -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare the server files
+        env:
+          PROD_ENV: ${{ secrets.PROD_ENV }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p bundle/postgres
+          cp deploy/docker-compose.prod.yml bundle/docker-compose.yml
+          cp deploy/Caddyfile bundle/Caddyfile
+          cp deploy/postgres/init-n8n-db.sh bundle/postgres/
+          printf '%s\n' "$PROD_ENV" > bundle/.env
+          # Image tags of this exact commit
+          {
+            echo "WEB_IMAGE=${{ needs.setup.outputs.web_image }}:${{ github.sha }}"
+            echo "N8N_IMAGE=${{ needs.setup.outputs.n8n_image }}:${{ github.sha }}"
+          } >> bundle/.env
+          # Default public n8n address when PROD_ENV does not set one
+          if ! grep -q '^N8N_WEBHOOK_URL=' bundle/.env; then
+            domain=$(grep '^APP_DOMAIN=' bundle/.env | cut -d= -f2- || true)
+            if [ -n "$domain" ]; then echo "N8N_WEBHOOK_URL=https://$domain:5678/" >> bundle/.env
+            else echo "N8N_WEBHOOK_URL=http://$SSH_HOST:5678/" >> bundle/.env; fi
+          fi
+          chmod 600 bundle/.env
+
+      - name: Upload and start
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          scp -i ~/.ssh/id_deploy -r bundle/. "$SSH_USER@$SSH_HOST:$APP_DIR/"
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "
+            set -e
+            cd $APP_DIR
+            echo '$GHCR_TOKEN' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker logout ghcr.io
+            docker image prune -f
+            docker compose ps
+          "
+
+  smoke:
+    name: Smoke test
+    needs: [setup, deploy]
+    if: needs.setup.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Wait for the app to be healthy
+        env:
+          APP_URL: ${{ vars.APP_URL || format('http://{0}', secrets.SSH_HOST) }}
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$APP_URL/api/health" | grep -q '"ok":true'; then echo "Healthy"; exit 0; fi
+            sleep 5
+          done
+          echo "::error::$APP_URL/api/health did not become healthy"; exit 1
+
+      - name: Smoke test
+        env:
+          APP_URL: ${{ vars.APP_URL || format('http://{0}', secrets.SSH_HOST) }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SMOKE_FULL: ${{ inputs.full_smoke && 'true' || 'false' }}
+        run: node web/scripts/smoke-test.mjs

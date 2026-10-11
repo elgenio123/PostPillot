@@ -1,0 +1,1509 @@
+{
+  "id": "ppGenerateDrafts",
+  "name": "PostPilot – Generate drafts",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PostPilot – Generate drafts\nThe app sends an event brief here. The agent:\n1. reads the brief and the prompt files\n2. writes one post per platform\n3. paints one image\n4. runs a safety check\n\nEvery **Tell app** node sends a progress message to the app, so the audience sees each step live.",
+        "width": 640,
+        "height": 300,
+        "color": 4
+      },
+      "id": "a2f2406a-d6fa-e263-af1b-4646a87212a8",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Start\nThe app calls this webhook. We first check the secret header, so only PostPilot can start the agent. Then we load the prompts from the app (they live in the `prompts/` folder).",
+        "width": 1180,
+        "height": 300,
+        "color": 7
+      },
+      "id": "bc87d3dc-fce7-a0cf-aa42-4f0b00e57914",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "postpilot-generate",
+        "options": {}
+      },
+      "id": "33853c6b-46b5-cf6c-467b-0d2bccbe4f61",
+      "name": "Brief received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        380
+      ],
+      "webhookId": "997c4786-e718-a8d0-b655-f9be283097e5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5447ead-5456-e0ea-e837-66a29ebd7f80",
+              "leftValue": "={{ $('Brief received').item.json.headers['x-postpilot-secret'] === $env.POSTPILOT_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "3f460d09-21a3-473e-d8ff-99568f6e60ab",
+      "name": "Is this our app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Brief received').item.json.body.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'brief', status: 'running', message: 'Reading the brief for ' + $('Brief received').item.json.body.organisation, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "626a3c91-3d00-58ed-a488-dd054d4c6693",
+      "name": "Tell app: reading brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        380
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/prompts",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "9cca0cac-3208-1e50-fd2a-c87472e38a23",
+      "name": "Load prompts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Brief received').item.json.body.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'brief', status: 'done', message: 'Brief read: writing for ' + $('Brief received').item.json.body.platforms.map((p) => p === 'facebook' ? 'Facebook' : 'LinkedIn').join(' and '), executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "79db468f-c453-7202-9a5c-a10051d19cb6",
+      "name": "Tell app: brief understood",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        380
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One job per platform. The system prompt = rules + brand voice + safety rules + platform rules.\nconst req = $(\"Brief received\").first().json.body;\nconst { prompts, presets } = $(\"Load prompts\").first().json;\nconst system = [prompts[\"draft-system\"], presets[req.preset] ?? \"\", prompts[\"safety-rules\"]].join(\"\\n\\n\");\nreturn req.platforms.map((platform) => ({\n  json: {\n    runId: req.runId,\n    platform,\n    label: platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\",\n    model: req.model,\n    brief: req.brief,\n    organisation: req.organisation,\n    trapPlatform: req.trapPlatform ?? null,\n    trapPrompt: prompts[\"trap\"],\n    messages: [\n      { role: \"system\", content: system + \"\\n\\n\" + prompts[\"platform-\" + platform] },\n      { role: \"user\", content: \"Organisation: \" + req.organisation + \"\\n\\nEvent brief:\\n\" + req.brief },\n    ],\n  },\n}));"
+      },
+      "id": "28a77d77-4e67-b0ec-77dc-be4a6f711f8e",
+      "name": "Prepare drafting jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Write one post per platform (loop)\n**One platform at a time** repeats the steps below for Facebook, then LinkedIn.\n- **Draft post with AI** calls OpenRouter.\n- **Check the AI answer** reads the JSON. If it is broken, we **ask again** once, more strictly.\n- **Demo trap**: if switched on in the app, one draft gets a deliberate mistake (wrong date or a fake promise) so the human reviewer can catch it.",
+        "width": 2440,
+        "height": 560,
+        "color": 5
+      },
+      "id": "a90ce97d-067b-6427-62d5-d71c787247dc",
+      "name": "Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b0412034-feb6-8426-836d-26e5a2423502",
+      "name": "One platform at a time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1320,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'draft_' + $('One platform at a time').item.json.platform, status: 'running', message: 'Writing the ' + $('One platform at a time').item.json.label + ' post with ' + $('One platform at a time').item.json.model, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "2e305124-bee3-e6f6-1ed9-5f5697f7682e",
+      "name": "Tell app: drafting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        660
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('One platform at a time').item.json.model, messages: $('One platform at a time').item.json.messages, response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "34036a23-2d04-cdf7-3f43-8c6e1a4e3211",
+      "name": "Draft post with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        660
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Reads the AI answer. ok = false means \"ask again\".\nconst job = $(\"One platform at a time\").item.json;\nconst content = $json.choices?.[0]?.message?.content ?? \"\";\nconst parsed = readJson(content);\nconst ok = !!(parsed && typeof parsed.text === \"string\" && parsed.text.trim().length > 20);\nreturn {\n  json: {\n    ...job,\n    ok,\n    text: ok ? parsed.text.trim() : \"\",\n    hashtags: ok && Array.isArray(parsed.hashtags) ? parsed.hashtags : [],\n    raw: String(content),\n    cost: $json.usage?.cost ?? 0,\n    error: $json.error?.message ?? null,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "08cce709-6112-7df0-10dc-4c7645003359",
+      "name": "Check the AI answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e0f063d8-b771-de5b-0994-922452144eee",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "12372bd6-405f-d197-6dac-a808cd84a715",
+      "name": "Answer usable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages.concat([{ role: 'assistant', content: $json.raw || '(empty)' }, { role: 'user', content: 'That answer was not valid. Reply again with ONLY the JSON object with the keys text and hashtags. No other words.' }]), response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "80d172e5-3a09-0fa9-f9d3-7826e06b20fa",
+      "name": "Ask again, stricter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        860
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const first = $(\"Answer usable?\").item.json;\nconst content = $json.choices?.[0]?.message?.content ?? \"\";\nconst parsed = readJson(content);\nlet ok = !!(parsed && typeof parsed.text === \"string\" && parsed.text.trim().length > 20);\nlet text = ok ? parsed.text.trim() : \"\";\n// Last resort: use the plain answer as the post if it looks like one\nif (!ok && String(content).trim().length > 40 && !String(content).includes(\"{\")) {\n  ok = true;\n  text = String(content).trim();\n}\nreturn {\n  json: {\n    ...first,\n    ok,\n    text,\n    hashtags: ok && Array.isArray(parsed?.hashtags) ? parsed.hashtags : [],\n    cost: first.cost + ($json.usage?.cost ?? 0),\n    error: ok ? null : ($json.error?.message ?? \"The AI did not return a usable post\"),\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "3a36d59c-73d6-7d59-9a04-472461540f10",
+      "name": "Check second answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b850de7-c2e7-97c0-0e30-d2c2bdb403a2",
+              "leftValue": "={{ $json.ok && $json.platform === $json.trapPlatform }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8a148c4c-3fba-e9f0-2e90-702632b50d43",
+      "name": "Is this the trap draft?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: [{ role: 'system', content: $json.trapPrompt }, { role: 'user', content: 'Event brief:\\n' + $json.brief + '\\n\\nPost:\\n' + $json.text }], response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "4c0a450d-db32-8259-9043-9d70561d03cf",
+      "name": "Plant the demo mistake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        860
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Keeps the original draft if the trap could not be planted\nconst draft = $(\"Is this the trap draft?\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst cost = draft.cost + ($json.usage?.cost ?? 0);\nif (p && typeof p.text === \"string\" && p.text.trim() && p.planted_quote) {\n  return { json: { ...draft, text: p.text.trim(), cost, trap: { quote: p.planted_quote, explanation: p.explanation ?? \"\" } } };\n}\nreturn { json: { ...draft, cost } };\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "82c71565-5b3b-4d9a-b0ab-3b4f93786fbf",
+      "name": "Read the planted mistake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const words = $json.text ? $json.text.split(/\\s+/).length : 0;\nconst message = $json.ok\n  ? $json.label + \" draft ready (\" + words + \" words)\"\n  : \"Could not write the \" + $json.label + \" post: \" + ($json.error ?? \"unknown error\");\nreturn { json: { ...$json, message } };"
+      },
+      "id": "1c7ce64a-8ae1-6b08-0a64-14bdc49fe22c",
+      "name": "Draft is final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'draft_' + $json.platform, status: $json.ok ? 'done' : 'failed', message: $json.message, data: { text: $json.text, hashtags: $json.hashtags, trap: $json.trap ?? null }, cost: $json.cost, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "fcba6cd2-e61a-323b-5d72-be9af38a59e6",
+      "name": "Tell app: draft ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        660
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: $(\"Draft is final\").item.json };"
+      },
+      "id": "d1b98468-54df-29b5-964b-ade6d7c3a162",
+      "name": "Back to the loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Paint one image\nOne image for the whole brief (the app crops it for each platform).\n1. The AI describes the picture.\n2. **OpenRouter** image model paints it.\n3. If that fails: free **Pollinations.ai**.\n4. If that fails too: the app draws a **branded template**. This step never fails.",
+        "width": 2240,
+        "height": 520,
+        "color": 6
+      },
+      "id": "59619fd4-a6f4-fd7a-7d7f-a8d7ac0d7a27",
+      "name": "Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The loop is finished. Continue only if at least one post was written.\nconst drafts = $input.all().map((i) => i.json).filter((d) => d.ok);\nif (!drafts.length) return [];\nconst first = drafts[0];\nreturn [{\n  json: {\n    runId: first.runId,\n    model: first.model,\n    brief: first.brief,\n    organisation: first.organisation,\n    drafts: drafts.map((d) => ({ platform: d.platform, text: d.text, trap: d.trap ?? null })),\n  },\n}];"
+      },
+      "id": "a75a1bf9-c55d-a761-0607-2a0017f4e60b",
+      "name": "All drafts written",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: 'Imagining a picture for the event', executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "6cf515db-6160-f645-6d50-0af05d277f1e",
+      "name": "Tell app: creating image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('All drafts written').item.json.model, messages: [{ role: 'system', content: $('Load prompts').first().json.prompts['image-prompt'] }, { role: 'user', content: 'Organisation: ' + $('All drafts written').item.json.organisation + '\\n\\nEvent brief:\\n' + $('All drafts written').item.json.brief }], response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "d38c7165-d832-1d3e-207b-46a80e420dc7",
+      "name": "Describe the image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        1240
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $(\"All drafts written\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst fallbackTitle = ctx.brief.split(/[.!?]/)[0].split(/\\s+/).slice(0, 6).join(\" \");\nreturn {\n  json: {\n    runId: ctx.runId,\n    imagePrompt: p?.image_prompt || \"Bright flat illustration of a school event in Cameroon: \" + ctx.brief.slice(0, 200),\n    title: p?.title || fallbackTitle,\n    date: p?.date || \"\",\n    cost: $json.usage?.cost ?? 0,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "2bba7f4d-edeb-9e5c-60cc-9572d300eff3",
+      "name": "Read image description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.IMAGE_MODEL, messages: [{ role: 'user', content: 'Create a landscape 16:9 image. ' + $json.imagePrompt }], modalities: ['image', 'text'], usage: { include: true } }) }}"
+      },
+      "id": "636e53cc-785b-a0de-a43d-a78aeb4be484",
+      "name": "Paint image (OpenRouter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        1240
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "98d6708c-e9a2-498c-6d37-15d0fcdef594",
+              "leftValue": "={{ !!$json.choices?.[0]?.message?.images?.[0]?.image_url?.url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d4bf86e3-1e58-f2ff-5e48-e7d12e461b32",
+      "name": "Got an image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').item.json.runId, source: 'openrouter', dataUrl: $json.choices[0].message.images[0].image_url.url, prompt: $('Read image description').item.json.imagePrompt, title: $('Read image description').item.json.title, date: $('Read image description').item.json.date }) }}"
+      },
+      "id": "2d86c533-8ee4-b7fd-03e8-7b72c2ae7ed0",
+      "name": "Save image in app",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1140
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.POLLINATIONS_URL.replace('{prompt}', encodeURIComponent($('Read image description').item.json.imagePrompt)) }}",
+        "options": {
+          "timeout": 90000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "b40664db-2d48-2c25-5585-316c02dfc168",
+      "name": "Paint image (Pollinations)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1380
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7316896c-8c79-a568-e9a6-dc663ef2aa91",
+              "leftValue": "={{ !!$binary.data && String($binary.data.mimeType || '').startsWith('image/') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0dc800dd-c5fe-b86d-75db-896aa8f03e57",
+      "name": "Got a Pollinations image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "runId",
+              "value": "={{ $('Read image description').item.json.runId }}"
+            },
+            {
+              "name": "source",
+              "value": "pollinations"
+            },
+            {
+              "name": "title",
+              "value": "={{ $('Read image description').item.json.title }}"
+            },
+            {
+              "name": "date",
+              "value": "={{ $('Read image description').item.json.date }}"
+            }
+          ]
+        }
+      },
+      "id": "dbd343fc-af28-1c61-3266-0071fc948a27",
+      "name": "Save Pollinations image in app",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        1300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').item.json.runId, source: 'template', title: $('Read image description').item.json.title, date: $('Read image description').item.json.date, note: 'OpenRouter image ' + (/429/.test(JSON.stringify($('Paint image (OpenRouter)').item.json)) ? 'busy (rate limit)' : 'failed') + ', Pollinations ' + (/429/.test(JSON.stringify($json)) ? 'busy (rate limit)' : 'failed') + ': template used' }) }}"
+      },
+      "id": "c6761b7e-2d5f-6928-fd0f-213a08e2ddbc",
+      "name": "Use the template image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        1480
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').item.json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: $json.source ? 'done' : 'failed', message: $json.source ? 'Image ready from ' + ({ openrouter: 'OpenRouter AI', pollinations: 'Pollinations.ai', template: 'the branded template' })[$json.source] : 'The image could not be saved', data: { title: $('Read image description').item.json.title }, cost: $('Read image description').item.json.cost + ($('Paint image (OpenRouter)').item.json.usage?.cost ?? 0), executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "9f3dd2a6-47a9-57c2-f2fd-1be5df733efb",
+      "name": "Tell app: image ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### 4. Safety check\nA second AI reads all drafts against the brief and the school safety rules (student names, photos of minors, personal data, promises, wrong dates).\nIf the demo trap is on, we **hide** the warning about the planted mistake: the human must find it.",
+        "width": 1180,
+        "height": 520,
+        "color": 3
+      },
+      "id": "544673db-8d9d-c7b1-0575-844260c3838e",
+      "name": "Note 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3540,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').item.json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'safety', status: 'running', message: 'Checking the drafts against the school safety rules', executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "9b9363c2-ff4f-76fd-1639-2de44ac3d153",
+      "name": "Tell app: checking safety",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $(\"All drafts written\").item.json;\nconst prompts = $(\"Load prompts\").first().json.prompts;\nconst drafts = ctx.drafts.map((d) => \"### \" + d.platform + \"\\n\" + d.text).join(\"\\n\\n\");\nreturn {\n  json: {\n    runId: ctx.runId,\n    model: ctx.model,\n    drafts: ctx.drafts,\n    messages: [\n      { role: \"system\", content: prompts[\"safety-check\"] + \"\\n\\n\" + prompts[\"safety-rules\"] },\n      { role: \"user\", content: \"Event brief:\\n\" + ctx.brief + \"\\n\\nDrafts:\\n\" + drafts },\n    ],\n  },\n};"
+      },
+      "id": "7a3c5dda-25e1-1aac-b8ed-eef40d35ab8c",
+      "name": "Prepare safety check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3820,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages, response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "340f5ab5-0cda-793e-76d8-e3a355c929c9",
+      "name": "Safety check with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4040,
+        1240
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $(\"Prepare safety check\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst list = Array.isArray(p?.drafts) ? p.drafts : [];\nconst drafts = ctx.drafts.map((d) => {\n  const found = list.find((x) => String(x.platform).toLowerCase() === d.platform);\n  let flags = Array.isArray(found?.flags) ? found.flags.filter((f) => f && f.quote) : [];\n  // Demo trap: hide warnings about the planted mistake so the human has to spot it\n  if (d.trap?.quote) flags = flags.filter((f) => !overlaps(f.quote, d.trap.quote));\n  return { platform: d.platform, flags };\n});\nconst total = drafts.reduce((s, d) => s + d.flags.length, 0);\nreturn { json: { runId: ctx.runId, ok: !!p, drafts, total, cost: $json.usage?.cost ?? 0 } };\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}\n\nfunction overlaps(a, b) {\n  const words = (s) => String(s).toLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [];\n  const wa = words(a), wb = new Set(words(b));\n  if (!wa.length || !wb.size) return false;\n  const shared = wa.filter((x) => wb.has(x)).length;\n  return shared / Math.min(wa.length, wb.size) >= 0.5;\n}"
+      },
+      "id": "1b1cfb16-8d88-e163-3290-3b89e39f781c",
+      "name": "Read flags & hide the demo trap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4260,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'safety', status: $json.ok ? 'done' : 'failed', message: $json.ok ? ($json.total ? $json.total + ' point(s) for you to check' : 'No safety problems found') : 'Safety check unavailable: please review carefully', data: { drafts: $json.drafts }, cost: $json.cost, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "2e4dd2fe-b02f-bba1-2ee6-76178b3d0c33",
+      "name": "Tell app: safety done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4480,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Brief received": {
+      "main": [
+        [
+          {
+            "node": "Is this our app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this our app?": {
+      "main": [
+        [
+          {
+            "node": "Tell app: reading brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: reading brief": {
+      "main": [
+        [
+          {
+            "node": "Load prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load prompts": {
+      "main": [
+        [
+          {
+            "node": "Tell app: brief understood",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: brief understood": {
+      "main": [
+        [
+          {
+            "node": "Prepare drafting jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare drafting jobs": {
+      "main": [
+        [
+          {
+            "node": "One platform at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One platform at a time": {
+      "main": [
+        [
+          {
+            "node": "All drafts written",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell app: drafting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: drafting": {
+      "main": [
+        [
+          {
+            "node": "Draft post with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft post with AI": {
+      "main": [
+        [
+          {
+            "node": "Check the AI answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the AI answer": {
+      "main": [
+        [
+          {
+            "node": "Answer usable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer usable?": {
+      "main": [
+        [
+          {
+            "node": "Is this the trap draft?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask again, stricter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask again, stricter": {
+      "main": [
+        [
+          {
+            "node": "Check second answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check second answer": {
+      "main": [
+        [
+          {
+            "node": "Is this the trap draft?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this the trap draft?": {
+      "main": [
+        [
+          {
+            "node": "Plant the demo mistake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft is final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plant the demo mistake": {
+      "main": [
+        [
+          {
+            "node": "Read the planted mistake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the planted mistake": {
+      "main": [
+        [
+          {
+            "node": "Draft is final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft is final": {
+      "main": [
+        [
+          {
+            "node": "Tell app: draft ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: draft ready": {
+      "main": [
+        [
+          {
+            "node": "Back to the loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to the loop": {
+      "main": [
+        [
+          {
+            "node": "One platform at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All drafts written": {
+      "main": [
+        [
+          {
+            "node": "Tell app: creating image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: creating image": {
+      "main": [
+        [
+          {
+            "node": "Describe the image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe the image": {
+      "main": [
+        [
+          {
+            "node": "Read image description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read image description": {
+      "main": [
+        [
+          {
+            "node": "Paint image (OpenRouter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paint image (OpenRouter)": {
+      "main": [
+        [
+          {
+            "node": "Got an image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got an image?": {
+      "main": [
+        [
+          {
+            "node": "Save image in app",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Paint image (Pollinations)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paint image (Pollinations)": {
+      "main": [
+        [
+          {
+            "node": "Got a Pollinations image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got a Pollinations image?": {
+      "main": [
+        [
+          {
+            "node": "Save Pollinations image in app",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use the template image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save image in app": {
+      "main": [
+        [
+          {
+            "node": "Tell app: image ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Pollinations image in app": {
+      "main": [
+        [
+          {
+            "node": "Tell app: image ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use the template image": {
+      "main": [
+        [
+          {
+            "node": "Tell app: image ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: image ready": {
+      "main": [
+        [
+          {
+            "node": "Tell app: checking safety",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: checking safety": {
+      "main": [
+        [
+          {
+            "node": "Prepare safety check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare safety check": {
+      "main": [
+        [
+          {
+            "node": "Safety check with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safety check with AI": {
+      "main": [
+        [
+          {
+            "node": "Read flags & hide the demo trap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read flags & hide the demo trap": {
+      "main": [
+        [
+          {
+            "node": "Tell app: safety done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "timezone": "Africa/Douala"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false
+}

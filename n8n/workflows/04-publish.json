@@ -1,0 +1,873 @@
+{
+  "id": "ppPublishPost001",
+  "name": "PostPilot – Publish",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PostPilot – Publish\nPublishes one approved post, now or at a chosen time.\n- **Mock mode**: no social network is called; we create a fake post ID and link.\n- **Facebook**: Graph API photo post. Facebook schedules natively (10 min – 30 days ahead).\n- **LinkedIn**: no simple native scheduling, so a **Wait** node pauses until the chosen time, then posts.",
+        "width": 760,
+        "height": 300,
+        "color": 4
+      },
+      "id": "d784bce8-c30a-dafa-1e73-22e64da35590",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "postpilot-publish",
+        "options": {}
+      },
+      "id": "1985f4b6-fb74-68f8-bd32-e7007982caa2",
+      "name": "Post to publish",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "7b2aa197-ca6b-007e-70c9-49b1dc1a2b42"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9252c098-fdf0-7791-e929-2b49ff0ac238",
+              "leftValue": "={{ $('Post to publish').item.json.headers['x-postpilot-secret'] === $env.POSTPILOT_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "4c08222c-09c1-25fe-ba95-60ca6e80c4d3",
+      "name": "Is this our app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "33ecd469-f30e-ed21-950a-fe75a9698b11",
+              "leftValue": "={{ $('Post to publish').item.json.body.mock }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d9930847-11d6-86db-36a4-c6059e76845f",
+      "name": "Mock publishing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Mock mode\nPerfect for demos without accounts. Scheduled mock posts still wait for their time, so the dashboard changes live.",
+        "width": 960,
+        "height": 340,
+        "color": 7
+      },
+      "id": "d7eb3dd7-55f1-4db0-57f4-00eb327685ac",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "92840644-fa48-781b-6825-d7d3f9e6ee2a",
+              "leftValue": "={{ !!$('Post to publish').item.json.body.scheduledAt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "3121eb22-ae5d-5a64-526f-84f9cc3b025b",
+      "name": "Scheduled for later? (mock)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $('Post to publish').item.json.body.scheduledAt }}"
+      },
+      "id": "02317b7f-bc76-43b5-b52e-9ba23fbe1dce",
+      "name": "Wait until the scheduled time (mock)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        100
+      ],
+      "webhookId": "7a1c2e33-5b8d-4f0e-a1c2-2b3d4e5f6a01"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const req = $(\"Post to publish\").item.json.body;\nreturn { json: { postId: req.postId, status: \"published\", externalId: \"mock_\" + Math.random().toString(36).slice(2, 10), url: \"/mock-post/\" + req.postId } };"
+      },
+      "id": "faa86903-9cee-3a7a-e475-c7010312d0ca",
+      "name": "Make a fake post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/posts/{{ $json.postId }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.status, externalId: $json.externalId, url: $json.url }) }}"
+      },
+      "id": "8b120f66-1f1b-855e-7793-8f6140d794a8",
+      "name": "Tell app: published (mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "64ceca7a-0642-59e4-1d36-8ae749ae7fbe",
+              "leftValue": "={{ $('Post to publish').item.json.body.platform === 'facebook' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "09115748-68eb-e231-58b8-24aed3fe9e32",
+      "name": "Facebook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Facebook Page\nDownload the image from the app, then send it with the text to `/{page-id}/photos`. For a later time we add `published=false` and `scheduled_publish_time`.",
+        "width": 920,
+        "height": 360,
+        "color": 5
+      },
+      "id": "4911e9ce-b2f7-06f3-9463-49ab2c0b22df",
+      "name": "Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        820,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $('Post to publish').item.json.body.imagePath }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "fbc60f10-8c97-4b54-7c87-9adeadb4f75f",
+      "name": "Download image for Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        560
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $env.FB_PAGE_ID }}/photos{{ $('Post to publish').item.json.body.scheduledUnix ? '?published=false&unpublished_content_type=SCHEDULED&scheduled_publish_time=' + $('Post to publish').item.json.body.scheduledUnix : '' }}",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Post to publish').item.json.body.text }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.FB_PAGE_TOKEN }}"
+            }
+          ]
+        }
+      },
+      "id": "1d64573a-9282-a2e6-7dd4-00c8510fe6ab",
+      "name": "Post photo to Facebook Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        560
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const req = $(\"Post to publish\").item.json.body;\nif ($json.error) {\n  const e = $json.error;\n  return { json: { postId: req.postId, status: \"failed\", error: \"Facebook: \" + (e.description || e.message || JSON.stringify(e)) } };\n}\nconst id = $json.post_id || $json.id;\nreturn { json: { postId: req.postId, status: req.scheduledAt ? \"scheduled\" : \"published\", externalId: id, url: \"https://www.facebook.com/\" + id } };"
+      },
+      "id": "411416db-af38-c666-6f29-244383d31599",
+      "name": "Read Facebook answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/posts/{{ $json.postId }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.status, externalId: $json.externalId, url: $json.url, error: $json.error }) }}"
+      },
+      "id": "8716df0c-9ae8-d18d-d17d-d2e9e1f311a0",
+      "name": "Tell app: Facebook result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        560
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### LinkedIn\n1. Wait until the chosen time (if scheduled).\n2. Ask LinkedIn for an upload slot, upload the image.\n3. Create the post with the image.\nLinkedIn text uses a special format, so we escape symbols and turn #tags into LinkedIn hashtags.",
+        "width": 1820,
+        "height": 380,
+        "color": 6
+      },
+      "id": "fc284991-caad-1daf-6e4b-e25e5a498b46",
+      "name": "Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        820,
+        780
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a235511b-ad71-6625-dca3-09f3c1f45cf5",
+              "leftValue": "={{ !!$('Post to publish').item.json.body.scheduledAt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e0f6955c-cb86-ea10-bb32-4be2368bee0d",
+      "name": "Scheduled for later? (LinkedIn)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $('Post to publish').item.json.body.scheduledAt }}"
+      },
+      "id": "3778c9b1-67fc-4824-4e83-e9fa1b393877",
+      "name": "Wait until the scheduled time",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        880
+      ],
+      "webhookId": "8b2d3f44-6c9e-4a1f-b2d3-3c4e5f6a7b02"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const req = $(\"Post to publish\").item.json.body;\n// LinkedIn \"little text\" format: reserved symbols must be escaped, hashtags use a template\nconst tags = [];\nlet t = req.text.replace(/#([\\p{L}\\p{N}_]+)/gu, (m, tag) => { tags.push(tag); return \"\\u0000\" + (tags.length - 1) + \"\\u0000\"; });\nt = t.replace(/[\\\\|{}@\\[\\]()<>#*_~]/g, (c) => \"\\\\\" + c);\nt = t.replace(/\\u0000(\\d+)\\u0000/g, (m, i) => \"{hashtag|\\\\#|\" + tags[Number(i)] + \"}\");\nreturn { json: { postId: req.postId, commentary: t, imagePath: req.imagePath } };"
+      },
+      "id": "c435b8a3-f3b5-9650-531c-dad035f55e83",
+      "name": "Prepare LinkedIn text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/images?action=initializeUpload",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ initializeUploadRequest: { owner: $env.LINKEDIN_AUTHOR_URN } }) }}"
+      },
+      "id": "0b41bb9e-d010-872c-46e6-f100dd9d3300",
+      "name": "Get a LinkedIn upload slot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $('Prepare LinkedIn text').item.json.imagePath }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "726d5f8d-c8b9-5258-1968-b91f2530204e",
+      "name": "Download image for LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('Get a LinkedIn upload slot').item.json.value?.uploadUrl }}",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "6eb8f56c-e036-2034-cbe2-9abec7c50851",
+      "name": "Upload image to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/posts",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').item.json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Get a LinkedIn upload slot').item.json.value?.image, altText: 'Event illustration' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
+      },
+      "id": "5b07699d-2e58-f9bd-cdfc-bf37c22f4642",
+      "name": "Create LinkedIn post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const postId = $(\"Prepare LinkedIn text\").item.json.postId;\nconst slot = $(\"Get a LinkedIn upload slot\").item.json;\nconst err = slot.error || $(\"Upload image to LinkedIn\").item.json.error || $json.error;\nif (err) return { json: { postId, status: \"failed\", error: \"LinkedIn: \" + (err.description || err.message || JSON.stringify(err)) } };\nconst urn = $json.headers?.[\"x-restli-id\"] || $json.headers?.[\"x-linkedin-id\"];\nreturn { json: { postId, status: \"published\", externalId: urn, url: urn ? \"https://www.linkedin.com/feed/update/\" + urn + \"/\" : null } };"
+      },
+      "id": "ffc7ed6f-d0ee-e9e7-32fc-696085ed46eb",
+      "name": "Read LinkedIn answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/posts/{{ $json.postId }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.status, externalId: $json.externalId, url: $json.url, error: $json.error }) }}"
+      },
+      "id": "388705b1-7356-7e9e-ef59-c001a1aa1678",
+      "name": "Tell app: LinkedIn result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        960
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Post to publish": {
+      "main": [
+        [
+          {
+            "node": "Is this our app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this our app?": {
+      "main": [
+        [
+          {
+            "node": "Mock publishing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock publishing?": {
+      "main": [
+        [
+          {
+            "node": "Scheduled for later? (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled for later? (mock)": {
+      "main": [
+        [
+          {
+            "node": "Wait until the scheduled time (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Make a fake post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait until the scheduled time (mock)": {
+      "main": [
+        [
+          {
+            "node": "Make a fake post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make a fake post": {
+      "main": [
+        [
+          {
+            "node": "Tell app: published (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook?": {
+      "main": [
+        [
+          {
+            "node": "Download image for Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Scheduled for later? (LinkedIn)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download image for Facebook": {
+      "main": [
+        [
+          {
+            "node": "Post photo to Facebook Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post photo to Facebook Page": {
+      "main": [
+        [
+          {
+            "node": "Read Facebook answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Facebook answer": {
+      "main": [
+        [
+          {
+            "node": "Tell app: Facebook result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled for later? (LinkedIn)": {
+      "main": [
+        [
+          {
+            "node": "Wait until the scheduled time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare LinkedIn text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait until the scheduled time": {
+      "main": [
+        [
+          {
+            "node": "Prepare LinkedIn text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare LinkedIn text": {
+      "main": [
+        [
+          {
+            "node": "Get a LinkedIn upload slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a LinkedIn upload slot": {
+      "main": [
+        [
+          {
+            "node": "Download image for LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download image for LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Upload image to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload image to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Create LinkedIn post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create LinkedIn post": {
+      "main": [
+        [
+          {
+            "node": "Read LinkedIn answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read LinkedIn answer": {
+      "main": [
+        [
+          {
+            "node": "Tell app: LinkedIn result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "timezone": "Africa/Douala"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false
+}

@@ -1,0 +1,526 @@
+{
+  "id": "ppRedraftPost001",
+  "name": "PostPilot – Redraft",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PostPilot – Redraft\nThe human rejected a draft and wrote why. The agent rewrites the post using that feedback, checks it again for safety, and sends the new version (v2, v3…) back to the app.",
+        "width": 620,
+        "height": 240,
+        "color": 4
+      },
+      "id": "5df4bf50-8a34-1e5c-bc74-18ddf8c495b7",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "postpilot-redraft",
+        "options": {}
+      },
+      "id": "3886035c-07c8-8639-dc70-ef9eb52da5c9",
+      "name": "Rejected draft received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "52e53ec4-8026-deb9-8f1c-181ccde2fbb5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3213c703-dce0-662e-21ce-ec67d2291b1a",
+              "leftValue": "={{ $('Rejected draft received').item.json.headers['x-postpilot-secret'] === $env.POSTPILOT_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0d3242ba-4fb4-164c-0ee6-fc23970f7632",
+      "name": "Is this our app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/prompts",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "4d606a78-9672-d9e0-ce6c-6df38bddb100",
+      "name": "Load prompts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const req = $(\"Rejected draft received\").item.json.body;\nconst { prompts, presets } = $(\"Load prompts\").item.json;\nconst system = [prompts[\"draft-system\"], presets[req.preset] ?? \"\", prompts[\"safety-rules\"], prompts[\"platform-\" + req.platform], prompts[\"redraft\"]].join(\"\\n\\n\");\nreturn {\n  json: {\n    runId: req.runId,\n    platform: req.platform,\n    label: req.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\",\n    model: req.model,\n    brief: req.brief,\n    reason: req.reason,\n    messages: [\n      { role: \"system\", content: system },\n      { role: \"user\", content: \"Organisation: \" + req.organisation + \"\\n\\nEvent brief:\\n\" + req.brief + \"\\n\\nPrevious draft:\\n\" + req.previousText + \"\\n\\nReviewer feedback: \" + req.reason },\n    ],\n  },\n};"
+      },
+      "id": "1cd5ac9b-f20d-8551-7fb3-8ecac504cdfb",
+      "name": "Build redraft prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages, response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "1d9f13f9-096c-43b2-8659-2fc6c1de14a4",
+      "name": "Redraft with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const job = $(\"Build redraft prompt\").item.json;\nconst content = $json.choices?.[0]?.message?.content ?? \"\";\nconst parsed = readJson(content);\nconst ok = !!(parsed && typeof parsed.text === \"string\" && parsed.text.trim().length > 20);\nreturn {\n  json: {\n    ...job,\n    ok,\n    text: ok ? parsed.text.trim() : \"\",\n    hashtags: ok && Array.isArray(parsed.hashtags) ? parsed.hashtags : [],\n    raw: String(content),\n    cost: $json.usage?.cost ?? 0,\n    error: $json.error?.message ?? null,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "57b2b52b-ca76-81ee-fda2-c280252f5b7f",
+      "name": "Check the AI answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0538d55a-2746-4191-9e90-21836a24a74e",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1bb98ac6-f41a-5bbd-aac7-dab6687a3b73",
+      "name": "Answer usable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages.concat([{ role: 'assistant', content: $json.raw || '(empty)' }, { role: 'user', content: 'That answer was not valid. Reply again with ONLY the JSON object with the keys text and hashtags. No other words.' }]), response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "b6b092a3-48bf-997c-afd0-953b636ba9e6",
+      "name": "Ask again, stricter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const first = $(\"Answer usable?\").item.json;\nconst content = $json.choices?.[0]?.message?.content ?? \"\";\nconst parsed = readJson(content);\nlet ok = !!(parsed && typeof parsed.text === \"string\" && parsed.text.trim().length > 20);\nlet text = ok ? parsed.text.trim() : \"\";\n// Last resort: use the plain answer as the post if it looks like one\nif (!ok && String(content).trim().length > 40 && !String(content).includes(\"{\")) {\n  ok = true;\n  text = String(content).trim();\n}\nreturn {\n  json: {\n    ...first,\n    ok,\n    text,\n    hashtags: ok && Array.isArray(parsed?.hashtags) ? parsed.hashtags : [],\n    cost: first.cost + ($json.usage?.cost ?? 0),\n    error: ok ? null : ($json.error?.message ?? \"The AI did not return a usable post\"),\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "25b53abf-4c32-fd93-1b09-c5bcea08939b",
+      "name": "Check second answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $json;\nconst prompts = $(\"Load prompts\").first().json.prompts;\nreturn {\n  json: {\n    ...d,\n    safetyMessages: [\n      { role: \"system\", content: prompts[\"safety-check\"] + \"\\n\\n\" + prompts[\"safety-rules\"] },\n      { role: \"user\", content: \"Event brief:\\n\" + d.brief + \"\\n\\nDrafts:\\n### \" + d.platform + \"\\n\" + d.text },\n    ],\n  },\n};"
+      },
+      "id": "68332b3e-fd8d-0a57-3a13-551cd551b896",
+      "name": "Prepare safety check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/postpilot-demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.safetyMessages, response_format: { type: 'json_object' }, usage: { include: true } }) }}"
+      },
+      "id": "769fea5f-e8bb-04a8-19da-c8c548bebce9",
+      "name": "Safety check with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $(\"Prepare safety check\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst found = (Array.isArray(p?.drafts) ? p.drafts : [])[0];\nconst flags = Array.isArray(found?.flags) ? found.flags.filter((f) => f && f.quote) : [];\nconst message = d.ok\n  ? \"New \" + d.label + \" version ready\" + (flags.length ? \" (\" + flags.length + \" point(s) to check)\" : \"\")\n  : \"Could not rewrite the \" + d.label + \" post: \" + (d.error ?? \"unknown error\");\nreturn { json: { ...d, flags, message, cost: d.cost + ($json.usage?.cost ?? 0) } };\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+      },
+      "id": "bd7b665c-a333-ac88-1711-2998c4a43459",
+      "name": "Read safety flags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'redraft_' + $json.platform, status: $json.ok ? 'done' : 'failed', message: $json.message, data: { text: $json.text, hashtags: $json.hashtags, flags: $json.flags, reason: $json.reason }, cost: $json.cost, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "a0341abd-0772-0912-58c6-c7c4910f95be",
+      "name": "Tell app: new version ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### Same pattern as Generate drafts\nAsk the AI → check the JSON → ask again once if broken → safety check → tell the app.",
+        "width": 1100,
+        "height": 520,
+        "color": 7
+      },
+      "id": "a232e48f-218b-49be-26d9-7e12f33fa1cf",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Rejected draft received": {
+      "main": [
+        [
+          {
+            "node": "Is this our app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this our app?": {
+      "main": [
+        [
+          {
+            "node": "Load prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load prompts": {
+      "main": [
+        [
+          {
+            "node": "Build redraft prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build redraft prompt": {
+      "main": [
+        [
+          {
+            "node": "Redraft with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redraft with AI": {
+      "main": [
+        [
+          {
+            "node": "Check the AI answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the AI answer": {
+      "main": [
+        [
+          {
+            "node": "Answer usable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer usable?": {
+      "main": [
+        [
+          {
+            "node": "Prepare safety check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask again, stricter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask again, stricter": {
+      "main": [
+        [
+          {
+            "node": "Check second answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check second answer": {
+      "main": [
+        [
+          {
+            "node": "Prepare safety check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare safety check": {
+      "main": [
+        [
+          {
+            "node": "Safety check with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safety check with AI": {
+      "main": [
+        [
+          {
+            "node": "Read safety flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read safety flags": {
+      "main": [
+        [
+          {
+            "node": "Tell app: new version ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "timezone": "Africa/Douala"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false
+}

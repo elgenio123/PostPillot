@@ -1,0 +1,14 @@
+# APP_SITE is the domain (HTTPS, automatic certificate) or ":80" (plain HTTP on the IP).
+# n8n uses the same name on port 5678, so one domain and one certificate cover both.
+
+{$APP_SITE} {
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		# Live updates (Server-Sent Events) must reach the browser immediately
+		flush_interval -1
+	}
+}
+
+{$N8N_SITE} {
+	reverse_proxy n8n:5678
+}

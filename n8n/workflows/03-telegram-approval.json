@@ -1,0 +1,462 @@
+{
+  "id": "ppTelegramApprov",
+  "name": "PostPilot – Telegram approval",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PostPilot – Telegram approval\nSends the draft and its image to the demonstrator's phone with **Approve / Reject** buttons, then waits.\nThe decision goes back to the app. The app keeps the **first** decision (app or Telegram) and ignores the later one.\n\nNeeds: Telegram credential *PostPilot Telegram bot* and a public `WEBHOOK_URL` (same Wi-Fi IP or `scripts/tunnel.sh`) so the buttons can reach n8n.",
+        "width": 700,
+        "height": 300,
+        "color": 4
+      },
+      "id": "a5dda083-63b9-8651-4c33-14aebcbdb817",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "postpilot-approval",
+        "options": {}
+      },
+      "id": "586073bf-f5f9-b165-82df-c49ffdcf4163",
+      "name": "Draft needs approval",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "c7ac78fa-bf7d-578d-d2f8-08e0b929ac61"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "009bedd0-c85c-c343-b04b-600c4ba2ab90",
+              "leftValue": "={{ $('Draft needs approval').item.json.headers['x-postpilot-secret'] === $env.POSTPILOT_SECRET }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "49631bd7-6e39-fb8a-5bb4-93b475dd76c2",
+      "name": "Is this our app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $(\"Draft needs approval\").item.json.body;\nconst label = d.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\";\nconst flags = Array.isArray(d.flags) ? d.flags : [];\nconst notes = flags.length ? \"\\n\\n⚠️ Safety notes:\\n\" + flags.map((f) => \"• \" + f.explanation).join(\"\\n\") : \"\";\nconst message = \"📝 \" + label + \" draft v\" + d.version + \" for \" + d.organisation + \"\\n\\n\" + d.text + notes;\nreturn { json: { ...d, label, message: message.slice(0, 3900), caption: label + \" post image (draft v\" + d.version + \")\" } };"
+      },
+      "id": "a710e530-2846-88cd-032f-7e6e39ab339c",
+      "name": "Write the Telegram message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f2c02646-b901-514a-251e-c556941be108",
+              "leftValue": "={{ !!$json.imagePath }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "34eb1364-ced3-9489-9b92-6f33972ecdec",
+      "name": "Has an image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $json.imagePath }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "59d0a4ba-4936-0325-a26a-6845cd60312b",
+      "name": "Download image from app",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "={{ $('Write the Telegram message').item.json.caption }}"
+        }
+      },
+      "id": "3e3af97e-0802-22bb-6f43-a25c464df419",
+      "name": "Send image to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        160
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ppTelegramCred01",
+          "name": "PostPilot Telegram bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "message": "={{ $('Write the Telegram message').item.json.message }}",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "✅ Approve",
+            "disapproveLabel": "❌ Reject"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 2,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "id": "82e19a1a-b3e1-d9a5-b3ca-93170ba00cc5",
+      "name": "Ask for approval on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ppTelegramCred01",
+          "name": "PostPilot Telegram bot"
+        }
+      },
+      "webhookId": "6f0b5e1e-3c0a-4b8e-9a51-9a0f2a7c1d01"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// data.approved is true or false when a button was pressed; missing when the wait timed out\nconst approved = $json.data?.approved;\nconst d = $(\"Write the Telegram message\").item.json;\nif (approved === undefined) return { json: { pressed: false } };\nreturn {\n  json: {\n    pressed: true,\n    draftId: d.draftId,\n    decision: approved ? \"approve\" : \"reject\",\n    reason: approved ? null : \"Rejected on Telegram: check every fact against the brief and improve the post.\",\n  },\n};"
+      },
+      "id": "173620ab-b71e-d6e9-d157-061b6762d7bd",
+      "name": "Read the decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fe0389bf-7536-981a-77b1-d68561b9e33b",
+              "leftValue": "={{ $json.pressed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7cbcb163-fb60-ed42-97bc-4c207002a4a2",
+      "name": "Was a button pressed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/decisions",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ draftId: $json.draftId, decision: $json.decision, reason: $json.reason, source: 'telegram' }) }}"
+      },
+      "id": "30f74266-b6af-60de-0e66-da20d4426ec9",
+      "name": "Tell app the decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.accepted ? ($('Read the decision').item.json.decision === 'approve' ? '✅ Approved. PostPilot will take it from here.' : '↩️ Rejected. The agent is writing a new version.') : 'ℹ️ Too late: this draft was already decided in the app (' + $json.existing + ').' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3d2e454e-cfd7-5e27-2db9-09eda4855b4b",
+      "name": "Confirm on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ppTelegramCred01",
+          "name": "PostPilot Telegram bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### Waiting for a human\n**Ask for approval on Telegram** pauses this execution until a button is pressed (max 2 hours). You can see it under *Executions* with the status *Waiting*.",
+        "width": 600,
+        "height": 200,
+        "color": 6
+      },
+      "id": "152deea4-25db-2bbf-27c1-37ff79b52e4f",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Draft needs approval": {
+      "main": [
+        [
+          {
+            "node": "Is this our app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is this our app?": {
+      "main": [
+        [
+          {
+            "node": "Write the Telegram message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the Telegram message": {
+      "main": [
+        [
+          {
+            "node": "Has an image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has an image?": {
+      "main": [
+        [
+          {
+            "node": "Download image from app",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask for approval on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download image from app": {
+      "main": [
+        [
+          {
+            "node": "Send image to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send image to Telegram": {
+      "main": [
+        [
+          {
+            "node": "Ask for approval on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask for approval on Telegram": {
+      "main": [
+        [
+          {
+            "node": "Read the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the decision": {
+      "main": [
+        [
+          {
+            "node": "Was a button pressed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was a button pressed?": {
+      "main": [
+        [
+          {
+            "node": "Tell app the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app the decision": {
+      "main": [
+        [
+          {
+            "node": "Confirm on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "timezone": "Africa/Douala"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false
+}

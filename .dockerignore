@@ -1,0 +1,10 @@
+# Build context is the repo root
+**/node_modules
+web/.next
+web/data
+.git
+.env
+.env.*
+!.env.example
+docs
+*.log

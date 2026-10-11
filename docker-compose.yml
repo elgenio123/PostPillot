@@ -1,0 +1,89 @@
+# Local development and demo laptop. The server uses deploy/docker-compose.prod.yml.
+name: postpilot
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-postpilot}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Creates the separate n8n database on first start
+      - ./deploy/postgres/init-n8n-db.sh:/docker-entrypoint-initdb.d/10-n8n.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postpilot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postpilot}
+      DATA_DIR: /data
+      N8N_INTERNAL_URL: http://n8n:5678
+    volumes:
+      - web-data:/data
+      # Mounted so prompts and config can be edited without rebuilding
+      - ./prompts:/app/prompts:ro
+      - ./config:/app/config:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/bootstrap/entrypoint.sh"]
+    env_file: .env
+    environment:
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      # Public address used in links (Telegram buttons, "See the workflow")
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_EDITOR_BASE_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${TIMEZONE:-Africa/Douala}
+      TZ: ${TIMEZONE:-Africa/Douala}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-postpilot}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Lets workflow expressions read keys from .env with $env
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      APP_INTERNAL_URL: http://web:3000
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./n8n:/bootstrap:ro
+    ports:
+      - "5678:5678"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Optional: public HTTPS address for Telegram buttons. Start with scripts/tunnel.sh
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://n8n:5678
+    depends_on:
+      - n8n
+
+volumes:
+  db-data:
+  web-data:
+  n8n-data:

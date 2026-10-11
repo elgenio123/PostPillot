@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Science fair in Yaoundé",
+    "organisation": "Lycée Bilingue de Mvog-Betsi",
+    "preset": "formal-school",
+    "brief": "Our annual Science & Innovation Fair takes place on Friday 14 November 2026 from 9:00 to 15:00 in the main courtyard of Lycée Bilingue de Mvog-Betsi, Yaoundé. Students from Form 3 to Upper Sixth will present 40 projects on solar energy, water purification and simple robotics. Parents, partner schools and the public are welcome. Entry is free. A jury from the University of Yaoundé I will award prizes to the three best projects at 14:00. Official contact: the school office, 222 23 45 67."
+  },
+  {
+    "title": "Open day in Buea",
+    "organisation": "Mount Fako University Institute",
+    "preset": "formal-school",
+    "brief": "Mount Fako University Institute in Buea opens its doors on Saturday 22 November 2026 from 10:00 to 16:00. Future students and parents can visit the computer labs, the library and the engineering workshops, meet lecturers, and attend short talks about our programmes in Software Engineering, Nursing and Accounting. Admission officers will answer questions about registration for the 2027 intake. Free entry, no registration needed. Campus address: Molyko, Buea."
+  },
+  {
+    "title": "Football final in Douala",
+    "organisation": "Collège Wouri Sports Club",
+    "preset": "sports-team",
+    "brief": "The inter-school football final of the Douala Schools Cup will be played on Wednesday 3 December 2026 at 15:30 at the Stade de Bépanda. Our team, Collège Wouri Sports Club, faces Lycée de Bonabéri after an unbeaten season. Supporters are asked to wear blue and white. Free entry for students in school uniform, 500 FCFA for other spectators. Come and cheer for the team!"
+  }
+]
