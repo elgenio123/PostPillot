@@ -91,8 +91,8 @@
 }
 
 /* Projector-friendly base size */
-html { font-size: 15px; }
-@media (min-width: 1600px) { html { font-size: 16px; } }
+html { font-size: 14px; }
+@media (min-width: 1600px) { html { font-size: 14.5px; } }
 
 body {
   background: var(--sky-glow), var(--background);

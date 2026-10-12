@@ -76,7 +76,7 @@ export function AccountMenu() {
     <>
       <Menu>
         <MenuTrigger asChild>
-          <button className="relative grid size-10 place-items-center rounded-full bg-primary-soft font-bold text-primary hover:ring-2 hover:ring-primary/30" aria-label="Account">
+          <button className="relative grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-bold text-primary hover:ring-2 hover:ring-primary/30" aria-label="Account">
             {user.name.slice(0, 1).toUpperCase() || <UserRound className="size-5" />}
             {user.mustChangePassword && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-accent ring-2 ring-background" />}
           </button>

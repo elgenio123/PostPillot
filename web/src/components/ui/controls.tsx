@@ -5,16 +5,18 @@ import { Switch as SwitchP, Select as SelectP, Tooltip as TooltipP, Checkbox as 
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function Switch({ className, ...props }: React.ComponentProps<typeof SwitchP.Root>) {
+export function Switch({ className, size = "md", ...props }: React.ComponentProps<typeof SwitchP.Root> & { size?: "sm" | "md" }) {
+  const sm = size === "sm";
   return (
     <SwitchP.Root
       className={cn(
-        "peer inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-muted-foreground/30 transition-colors data-[state=checked]:bg-primary disabled:opacity-50",
+        "peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-muted-foreground/30 transition-colors data-[state=checked]:bg-primary disabled:opacity-50",
+        sm ? "h-5 w-9" : "h-7 w-12",
         className,
       )}
       {...props}
     >
-      <SwitchP.Thumb className="pointer-events-none block size-6 rounded-full bg-white shadow-md transition-transform data-[state=checked]:translate-x-5" />
+      <SwitchP.Thumb className={cn("pointer-events-none block rounded-full bg-white shadow-md transition-transform", sm ? "size-4 data-[state=checked]:translate-x-4" : "size-6 data-[state=checked]:translate-x-5")} />
     </SwitchP.Root>
   );
 }
