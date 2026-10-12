@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, BookOpenText, Check, Clock, ImageIcon, Loader2, PenLine, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
-import { STEP_LABELS, timelineSteps, type RunDetail, type StepStatus } from "@/lib/types";
+import { AlertTriangle, BookOpenText, Check, Clapperboard, Clock, ImageIcon, Loader2, PenLine, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
+import { stepLabel, timelineSteps, type RunDetail, type StepStatus } from "@/lib/types";
 import { TypeText } from "./type-text";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +56,7 @@ export function Timeline({ run }: { run: RunDetail }) {
   return (
     <ol className="relative">
       {steps.map((s, i) => {
-        const Icon = ICONS[s.step] ?? Check;
+        const Icon = s.step === "image" && run.media === "video" ? Clapperboard : ICONS[s.step] ?? Check;
         const draft = s.step.includes("draft_") && s.status === "done" ? draftFor(s.step) : undefined;
         const isLast = i === steps.length - 1;
         return (
@@ -65,12 +65,12 @@ export function Timeline({ run }: { run: RunDetail }) {
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.06 }}
-            className="relative flex gap-5 pb-7"
+            className="relative flex gap-3 pb-6 sm:gap-5 sm:pb-7"
           >
             {!isLast && (
-              <span className="absolute left-[27px] top-14 h-[calc(100%-3.5rem)] w-1 overflow-hidden rounded-full bg-border" aria-hidden>
+              <span className="absolute left-[20px] top-11 h-[calc(100%-2.75rem)] w-1 overflow-hidden rounded-full bg-border sm:left-[27px] sm:top-14 sm:h-[calc(100%-3.5rem)]" aria-hidden>
                 <motion.span
-                  className="block w-full rounded-full bg-gradient-to-b from-primary to-[#0EA5E9]"
+                  className="block w-full rounded-full bg-gradient-to-b from-primary to-primary/50"
                   initial={{ height: 0 }}
                   animate={{ height: s.status === "done" ? "100%" : "0%" }}
                   transition={{ duration: 0.6, ease: "easeOut" }}
@@ -80,9 +80,9 @@ export function Timeline({ run }: { run: RunDetail }) {
             <div className="relative shrink-0">
               <motion.span
                 className={cn(
-                  "relative z-10 grid size-14 place-items-center rounded-2xl border-2 transition-colors duration-500",
+                  "relative z-10 grid size-11 place-items-center rounded-2xl border-2 transition-colors duration-500 sm:size-14",
                   s.status === "done" && "border-transparent bg-primary text-primary-foreground shadow-lift",
-                  s.status === "running" && "border-accent bg-accent-soft text-accent",
+                  s.status === "running" && "border-primary bg-primary-soft text-primary",
                   s.status === "failed" && "border-danger bg-danger-soft text-danger",
                   s.status === "waiting" && "border-border bg-card text-muted-foreground",
                 )}
@@ -91,15 +91,15 @@ export function Timeline({ run }: { run: RunDetail }) {
               >
                 {s.status === "running" ? <Loader2 className="size-6 animate-spin" /> : s.status === "done" ? <Check className="size-6" strokeWidth={3} /> : s.status === "failed" ? <X className="size-6" strokeWidth={3} /> : <Icon className="size-6" />}
               </motion.span>
-              {s.status === "running" && <span className="absolute inset-0 animate-ping rounded-2xl bg-accent/25" aria-hidden />}
+              {s.status === "running" && <span className="absolute inset-0 animate-ping rounded-2xl bg-primary/20" aria-hidden />}
             </div>
             <div className="min-w-0 flex-1 pt-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <h4 className={cn("text-xl font-bold", s.status === "waiting" && "text-muted-foreground")}>{STEP_LABELS[s.step] ?? s.step}</h4>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h4 className={cn("text-base font-bold sm:text-xl", s.status === "waiting" && "text-muted-foreground")}>{stepLabel(s.step, run.media)}</h4>
                 <span className={cn(
                   "rounded-full px-2.5 py-0.5 text-sm font-semibold",
                   s.status === "done" && "bg-success-soft text-success",
-                  s.status === "running" && "bg-accent-soft text-accent",
+                  s.status === "running" && "bg-primary-soft text-primary",
                   s.status === "failed" && "bg-danger-soft text-danger",
                   s.status === "waiting" && "bg-muted text-muted-foreground",
                 )}>
@@ -112,14 +112,14 @@ export function Timeline({ run }: { run: RunDetail }) {
               </div>
               <AnimatePresence initial={false}>
                 {s.messages.slice(-2).map((m) => (
-                  <motion.p key={m.id} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={cn("mt-1 text-lg", s.status === "failed" ? "text-danger" : "text-muted-foreground")}>
+                  <motion.p key={m.id} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={cn("mt-1 text-sm sm:text-lg", s.status === "failed" ? "text-danger" : "text-muted-foreground")}>
                     {s.status === "failed" && <AlertTriangle className="mr-1.5 inline size-5" />}
                     <TypeText id={`m${m.id}`} text={m.text} duration={600} />
                   </motion.p>
                 ))}
               </AnimatePresence>
               {draft && (
-                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-2xl border border-border bg-muted/60 p-4 text-base leading-relaxed">
+                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-2xl border border-border bg-muted/60 p-3 text-sm leading-relaxed sm:p-4 sm:text-base">
                   <TypeText id={`d${draft.id}`} text={draft.text.length > 280 ? draft.text.slice(0, 280) + "…" : draft.text} className="whitespace-pre-line" />
                 </motion.div>
               )}

@@ -12,13 +12,13 @@ export const DialogClose = D.Close;
 export function DialogContent({ className, children, side, ...props }: React.ComponentProps<typeof D.Content> & { side?: "right" }) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm" />
+      <D.Overlay className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in" />
       <D.Content
         className={cn(
           "fixed z-50 border border-border bg-card shadow-lift focus:outline-none",
           side === "right"
-            ? "inset-y-0 right-0 h-full w-full max-w-xl overflow-y-auto rounded-l-3xl p-8"
-            : "left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-3xl p-7",
+            ? "inset-y-0 right-0 h-full w-full max-w-xl overflow-y-auto rounded-l-3xl p-5 data-[state=closed]:animate-sheet-out data-[state=open]:animate-sheet-in sm:p-8"
+            : "left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl p-5 data-[state=closed]:animate-dialog-out data-[state=open]:animate-dialog-in sm:p-7",
           className,
         )}
         {...props}

@@ -31,7 +31,7 @@ export function templateSvg(title: string, date: string, organisation: string): 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#312E81"/><stop offset="0.6" stop-color="#3730A3"/><stop offset="1" stop-color="#0EA5E9"/>
+      <stop offset="0" stop-color="#312E81"/><stop offset="0.6" stop-color="#3730A3"/><stop offset="1" stop-color="#4F46E5"/>
     </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>

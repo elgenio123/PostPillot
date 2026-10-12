@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AppProvider } from "@/components/app-provider";
 import { Header } from "@/components/header";
@@ -13,13 +13,16 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg" },
 };
 
+// viewport-fit=cover lets the phone tab bar sit above the home indicator
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <body className="min-h-screen font-sans">
         <AppProvider>
           <Header />
-          <main className="mx-auto max-w-[1800px] px-6 pb-16 pt-8">
+          <main className="mx-auto max-w-[1800px] px-4 pb-24 pt-5 sm:px-6 sm:pt-8 md:pb-16">
             <DefaultPasswordBanner />
             {children}
           </main>

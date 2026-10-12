@@ -12,7 +12,8 @@ export async function proxy(req: NextRequest) {
   // n8n calls the app with the shared secret; internal routes check it themselves
   if (pathname.startsWith("/api/internal/")) return NextResponse.next();
   const secret = process.env.POSTPILOT_SECRET;
-  if (secret && pathname.startsWith("/api/images/") && req.headers.get("x-postpilot-secret") === secret) return NextResponse.next();
+  const media = pathname.startsWith("/api/images/") || pathname.startsWith("/api/videos/");
+  if (secret && media && req.headers.get("x-postpilot-secret") === secret) return NextResponse.next();
 
   const user = await getSessionUser(req.cookies.get(SESSION_COOKIE)?.value).catch(() => null);
   if (user) return NextResponse.next();

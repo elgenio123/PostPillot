@@ -11,6 +11,8 @@ const NewRunSchema = z.object({
   organisation: z.string().trim().min(2, "Please enter the school or organisation name").max(120),
   preset: z.string(),
   platforms: z.array(z.enum(["facebook", "linkedin"])).min(1, "Choose at least one platform"),
+  media: z.enum(["image", "video"]).default("image"),
+  videoSeconds: z.number().int().min(5, "Videos are 5 to 10 seconds long").max(10, "Videos are 5 to 10 seconds long").optional(),
 });
 
 export async function GET() {

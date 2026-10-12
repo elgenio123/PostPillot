@@ -3,7 +3,7 @@ import path from "node:path";
 import { Pool, type PoolClient } from "pg";
 import { hashPassword } from "./password";
 
-// Images are files on disk; everything else lives in PostgreSQL
+// Images and videos are files on disk; everything else lives in PostgreSQL
 export const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), "data");
 
 const SCHEMA = `
@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at TEXT NOT NULL, created_at TEXT NOT NULL, user_agent TEXT
 );
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, source TEXT NOT NULL,
+  file TEXT NOT NULL, poster TEXT NOT NULL, seconds DOUBLE PRECISION, bytes INTEGER NOT NULL, prompt TEXT, note TEXT,
+  created_at TEXT NOT NULL
+);
+-- Added with video posts; existing databases get the columns on the next start
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS media TEXT NOT NULL DEFAULT 'image';
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS video_seconds INTEGER;
 CREATE INDEX IF NOT EXISTS drafts_run_idx ON drafts(run_id);
 CREATE INDEX IF NOT EXISTS events_run_idx ON events(run_id);
 CREATE INDEX IF NOT EXISTS posts_run_idx ON posts(run_id);

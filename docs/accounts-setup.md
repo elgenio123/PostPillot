@@ -19,6 +19,7 @@ After every change to `.env`, run `docker compose up -d` so both containers get 
    - Set a **credit limit** on the key (e.g. $5). Even if the key leaks, it can never spend more.
 4. Put it in `.env`: `OPENROUTER_API_KEY=sk-or-...`
 5. Check that `IMAGE_MODEL` is a model that can output images. On https://openrouter.ai/models, filter by *Output modalities: image*.
+6. For video posts, check `VIDEO_MODEL`. https://openrouter.ai/api/v1/videos/models lists every video model with its `supported_durations` (it must allow 5–10 s) and its price per second. The default `x-ai/grok-imagine-video-1.5-lite` at 480p costs about $0.10 for 5 s and $0.20 for 10 s. Every other video model costs more.
 
 The model list in the header comes from `config/models.json`. Model names change often, so check the IDs on openrouter.ai/models before the event and update the file. No restart is needed.
 

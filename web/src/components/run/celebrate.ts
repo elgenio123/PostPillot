@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 
-const COLORS = ["#3730A3", "#6366F1", "#0EA5E9", "#F97316", "#FDBA74"];
+// Brand indigo shades with a touch of the orange accent
+const COLORS = ["#312E81", "#4F46E5", "#818CF8", "#C7D2FE", "#F97316"];
 
 // Light confetti burst from an element (or the centre); skipped for reduced motion
 export function celebrate(from?: HTMLElement | null, big = false) {

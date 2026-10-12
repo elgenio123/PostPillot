@@ -5,14 +5,14 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-all duration-150 select-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[1.15em] [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-all duration-200 ease-out select-none active:scale-[0.97] active:duration-75 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[1.15em] [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         // Orange is reserved for the main call to action
-        accent: "bg-accent text-accent-foreground shadow-[0_8px_20px_-6px_rgb(249_115_22/0.55)] hover:bg-accent-hover hover:shadow-[0_12px_28px_-8px_rgb(249_115_22/0.65)] hover:-translate-y-px",
-        // Same indigo-to-sky gradient as the PostPilot logo
-        brand: "bg-gradient-to-br from-[#3730A3] to-[#0284C7] text-white shadow-[0_8px_20px_-6px_rgb(55_48_163/0.55)] hover:brightness-110 hover:shadow-[0_12px_28px_-8px_rgb(55_48_163/0.65)] hover:-translate-y-px",
+        accent: "sheen bg-accent text-accent-foreground shadow-[0_8px_20px_-6px_rgb(249_115_22/0.55)] hover:bg-accent-hover hover:shadow-[0_12px_28px_-8px_rgb(249_115_22/0.65)] hover:-translate-y-px",
+        // Same brand gradient as the PostPilot logo
+        brand: "bg-brand text-white shadow-[0_8px_20px_-6px_rgb(55_48_163/0.55)] hover:brightness-110 hover:shadow-[0_12px_28px_-8px_rgb(55_48_163/0.65)] hover:-translate-y-px",
         primary: "bg-primary text-primary-foreground shadow-soft hover:brightness-110 hover:-translate-y-px",
         secondary: "bg-card text-foreground border border-border shadow-soft hover:bg-muted hover:-translate-y-px",
         ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",

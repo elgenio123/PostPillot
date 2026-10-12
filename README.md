@@ -5,7 +5,7 @@
 PostPilot is a live demo for the AI Sandbox at the Cameroon International Tech Summit. You give it a one-paragraph event brief. It then:
 
 1. writes a Facebook post and a LinkedIn post,
-2. creates a matching image,
+2. creates a matching image, or a 5–10 second video (you choose on the brief page),
 3. runs a safety check (no student names, no personal data, no promises the brief does not make, no wrong dates),
 4. asks **you** to approve, edit or reject each draft, in the app or on your phone through Telegram,
 5. publishes now or at a scheduled time,
@@ -16,7 +16,7 @@ The AI agent does the flying. The human is the pilot.
 All the agent work happens in **n8n** workflows that you can open and show to visitors. The web app is the cockpit.
 
 ```
- Browser ──► web (Next.js, login) ──webhooks──► n8n ──► OpenRouter (text + images)
+ Browser ──► web (Next.js, login) ──webhooks──► n8n ──► OpenRouter (text, images, videos)
                │                                 │
                └──────── PostgreSQL ─────────────┘   (databases "postpilot" and "n8n")
     ▲             ▲                                 │──► Pollinations.ai (free image fallback)
@@ -84,6 +84,7 @@ You can change the prompts in `prompts/` at any time. They are read on every run
 
 - [docs/deployment.md](docs/deployment.md): deploy to AWS EC2 (or any Ubuntu server) from your PC with `./scripts/deploy.sh`, or with GitHub Actions.
 - [docs/accounts-setup.md](docs/accounts-setup.md): OpenRouter, Telegram, Facebook and LinkedIn step by step. **Start several days before the event.**
+- [docs/workflows.md](docs/workflows.md): developer notes: what each workflow does, the app ⇄ n8n contract, and how the frontend follows a run.
 - [docs/n8n-beginner-guide.md](docs/n8n-beginner-guide.md): learn n8n through the PostPilot workflows.
 - [docs/demo-script.md](docs/demo-script.md): the 5-minute demo, what to say and when.
 - [docs/offline-plan.md](docs/offline-plan.md): plan B for bad internet, and how to record a backup video.
@@ -110,6 +111,7 @@ The full smoke test uses real OpenRouter calls: about $0.03 with the default mod
 | Telegram buttons do nothing | Your phone cannot reach n8n. Set `N8N_WEBHOOK_URL=http://<laptop-LAN-IP>:5678/` (same Wi-Fi) and run `docker compose up -d n8n`, or run `./scripts/tunnel.sh`. |
 | Telegram toggle is on but no message arrives | Check the token in Settings. You must send `/start` to your bot once. After changing the token, run `docker compose up -d n8n`. |
 | I edited a workflow in n8n and want the original back | `N8N_FORCE_REIMPORT=true docker compose up -d n8n`. Your edits are overwritten. |
+| A video run shows an **animated image** instead of an AI video | The video model refused or failed (check `VIDEO_MODEL`, its supported durations on openrouter.ai, and your credit). The reason is in the timeline. |
 | Start from scratch | `docker compose down -v` deletes all data (PostgreSQL, images, n8n). |
 | Forgot the app password | `docker compose exec db psql -U postpilot -d postpilot -c "DELETE FROM users"` then `docker compose restart web`: the default login from `.env` is created again. |
 | Facebook says the scheduled time is invalid | It must be between 10 minutes and 30 days ahead. The app checks this before sending. |

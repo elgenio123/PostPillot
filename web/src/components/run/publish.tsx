@@ -36,18 +36,18 @@ function PostResult({ post }: { post: Post }) {
   const realFbScheduled = post.status === "scheduled" && post.platform === "facebook" && !post.mock;
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn(
-      "flex flex-wrap items-center gap-4 rounded-2xl p-5",
+      "flex flex-wrap items-center gap-3 rounded-2xl p-4 sm:gap-4 sm:p-5",
       post.status === "published" && "bg-success-soft",
       post.status === "scheduled" && "bg-primary-soft",
       post.status === "publishing" && "bg-muted",
       post.status === "failed" && "bg-danger-soft",
     )}>
-      {post.status === "published" && <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", bounce: 0.6 }}><CheckCircle2 className="size-12 text-success" /></motion.span>}
+      {post.status === "published" && <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", bounce: 0.6 }}><CheckCircle2 className="size-10 text-success sm:size-12" /></motion.span>}
       {post.status === "scheduled" && <CalendarClock className="size-12 text-primary" />}
       {post.status === "publishing" && <Loader2 className="size-12 animate-spin text-muted-foreground" />}
       {post.status === "failed" && <XCircle className="size-12 text-danger" />}
       <div className="min-w-0 flex-1">
-        <p className="text-xl font-bold">
+        <p className="text-lg font-bold sm:text-xl">
           {post.status === "published" && "Published!"}
           {post.status === "scheduled" && (realFbScheduled ? "Scheduled on Facebook" : <>Publishing in <Countdown to={post.scheduledAt!} /></>)}
           {post.status === "publishing" && "Publishing…"}
@@ -104,11 +104,11 @@ function PublishCard({ run, platform, onChanged }: { run: RunDetail; platform: "
 
   return (
     <motion.div ref={cardRef} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="p-6">
-        <div className="mb-5 flex items-center gap-3">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-4 flex items-center gap-3 sm:mb-5">
           <PlatformIcon platform={platform} className="size-10 text-lg" />
-          <h3 className="text-2xl font-bold">{PLATFORM_LABEL[platform]}</h3>
-          <Badge tone={mock ? "accent" : "primary"} className="ml-auto">{mock ? "Mock publishing" : "Real publishing"}</Badge>
+          <h3 className="text-xl font-bold sm:text-2xl">{PLATFORM_LABEL[platform]}</h3>
+          <Badge tone={mock ? "neutral" : "primary"} className="ml-auto">{mock ? "Mock publishing" : "Real publishing"}</Badge>
         </div>
 
         {!draft ? (
@@ -119,8 +119,12 @@ function PublishCard({ run, platform, onChanged }: { run: RunDetail; platform: "
           </div>
         ) : (
           <>
-            <div className="mb-5 flex gap-4 rounded-2xl bg-muted/60 p-4">
-              {run.image && <img src={platform === "facebook" ? run.image.facebook : run.image.linkedin} alt="" className="h-24 w-44 shrink-0 rounded-xl object-cover" />}
+            <div className="mb-5 flex flex-col gap-4 rounded-2xl bg-muted/60 p-4 sm:flex-row">
+              {run.media === "video" && run.video ? (
+                <video src={run.video.url} poster={run.video.poster} muted playsInline controls preload="metadata" className="aspect-video w-full shrink-0 rounded-xl bg-black object-cover sm:h-24 sm:w-44" />
+              ) : run.image && (
+                <img src={platform === "facebook" ? run.image.facebook : run.image.linkedin} alt="" className="aspect-[1200/630] w-full shrink-0 rounded-xl object-cover sm:h-24 sm:w-44" />
+              )}
               <p className="line-clamp-4 whitespace-pre-line text-base">{draft.text}</p>
             </div>
 
@@ -131,9 +135,9 @@ function PublishCard({ run, platform, onChanged }: { run: RunDetail; platform: "
                 <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <div className="grid grid-cols-2 gap-3">
                     {([["now", Rocket, "Post now", "Publish immediately"], ["later", CalendarClock, "Schedule", "Pick a date and time"]] as const).map(([m, Icon, title, sub]) => (
-                      <button key={m} type="button" onClick={() => { setMode(m); if (m === "later") setWhen(localInput(new Date(Date.now() + (rule.minMinutes + 2) * 60000))); }} className={cn("flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition", mode === m ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40")}>
-                        <Icon className={cn("size-7", mode === m ? "text-primary" : "text-muted-foreground")} />
-                        <span><span className="block text-lg font-bold">{title}</span><span className="text-sm text-muted-foreground">{sub}</span></span>
+                      <button key={m} type="button" onClick={() => { setMode(m); if (m === "later") setWhen(localInput(new Date(Date.now() + (rule.minMinutes + 2) * 60000))); }} className={cn("flex items-center gap-2 rounded-2xl border-2 p-3 text-left transition sm:gap-3 sm:p-4", mode === m ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40")}>
+                        <Icon className={cn("size-6 shrink-0 sm:size-7", mode === m ? "text-primary" : "text-muted-foreground")} />
+                        <span><span className="block font-bold sm:text-lg">{title}</span><span className="hidden text-sm text-muted-foreground sm:inline">{sub}</span></span>
                       </button>
                     ))}
                   </div>

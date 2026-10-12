@@ -78,7 +78,7 @@ export function AccountMenu() {
         <MenuTrigger asChild>
           <button className="relative grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-bold text-primary hover:ring-2 hover:ring-primary/30" aria-label="Account">
             {user.name.slice(0, 1).toUpperCase() || <UserRound className="size-5" />}
-            {user.mustChangePassword && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-accent ring-2 ring-background" />}
+            {user.mustChangePassword && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-primary ring-2 ring-background" />}
           </button>
         </MenuTrigger>
         <MenuContent align="end">
@@ -101,10 +101,10 @@ export function DefaultPasswordBanner() {
   const [open, setOpen] = React.useState(false);
   if (!user?.mustChangePassword) return null;
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3">
-      <ShieldAlert className="size-5 text-accent" />
+    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary-soft px-4 py-3">
+      <ShieldAlert className="size-5 shrink-0 text-primary" />
       <p className="flex-1 font-semibold">You are still using the default password. Change it before sharing this server.</p>
-      <Button size="sm" variant="accent" onClick={() => setOpen(true)}>Change password</Button>
+      <Button size="sm" variant="primary" onClick={() => setOpen(true)}>Change password</Button>
       <PasswordDialog open={open} onOpenChange={setOpen} />
     </div>
   );

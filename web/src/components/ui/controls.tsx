@@ -10,13 +10,13 @@ export function Switch({ className, size = "md", ...props }: React.ComponentProp
   return (
     <SwitchP.Root
       className={cn(
-        "peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-muted-foreground/30 transition-colors data-[state=checked]:bg-primary disabled:opacity-50",
+        "peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-muted-foreground/30 transition-colors duration-300 data-[state=checked]:bg-primary disabled:opacity-50",
         sm ? "h-5 w-9" : "h-7 w-12",
         className,
       )}
       {...props}
     >
-      <SwitchP.Thumb className={cn("pointer-events-none block rounded-full bg-white shadow-md transition-transform", sm ? "size-4 data-[state=checked]:translate-x-4" : "size-6 data-[state=checked]:translate-x-5")} />
+      <SwitchP.Thumb className={cn("pointer-events-none block rounded-full bg-white shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]", sm ? "size-4 data-[state=checked]:translate-x-4" : "size-6 data-[state=checked]:translate-x-5")} />
     </SwitchP.Root>
   );
 }
@@ -47,10 +47,10 @@ export function Select({ value, onValueChange, options, className, placeholder, 
         <SelectP.Icon><ChevronDown className="size-4 opacity-60" /></SelectP.Icon>
       </SelectP.Trigger>
       <SelectP.Portal>
-        <SelectP.Content position="popper" sideOffset={6} className="z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border bg-card p-1.5 shadow-lift">
+        <SelectP.Content position="popper" sideOffset={6} className="z-50 min-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-hidden rounded-2xl border border-border bg-card p-1.5 shadow-lift data-[state=closed]:animate-pop-out data-[state=open]:animate-pop-in">
           <SelectP.Viewport>
             {options.map((o) => (
-              <SelectP.Item key={o.value} value={o.value} className="relative flex cursor-pointer select-none flex-col rounded-xl py-2 pl-9 pr-3 outline-none data-[highlighted]:bg-primary-soft">
+              <SelectP.Item key={o.value} value={o.value} className="relative flex cursor-pointer select-none flex-col rounded-xl py-2 pl-9 pr-3 outline-none transition-colors data-[highlighted]:bg-primary-soft">
                 <SelectP.ItemIndicator className="absolute left-3 top-3"><Check className="size-4 text-primary" /></SelectP.ItemIndicator>
                 <SelectP.ItemText>{o.label}</SelectP.ItemText>
                 {o.hint && <span className="text-sm text-muted-foreground">{o.hint}</span>}
@@ -68,7 +68,7 @@ export function Tip({ children, content, side = "bottom" }: { children: React.Re
     <TooltipP.Root delayDuration={200}>
       <TooltipP.Trigger asChild>{children}</TooltipP.Trigger>
       <TooltipP.Portal>
-        <TooltipP.Content side={side} sideOffset={6} className="z-50 max-w-xs rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background shadow-lift">
+        <TooltipP.Content side={side} sideOffset={6} className="z-50 max-w-xs origin-[var(--radix-tooltip-content-transform-origin)] rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background shadow-lift data-[state=closed]:animate-fade-out data-[state=delayed-open]:animate-pop-in data-[state=instant-open]:animate-fade-in">
           {content}
           <TooltipP.Arrow className="fill-foreground" />
         </TooltipP.Content>
@@ -88,7 +88,7 @@ export function TabsList({ className, ...props }: React.ComponentProps<typeof Ta
 export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsP.Trigger>) {
   return (
     <TabsP.Trigger
-      className={cn("rounded-xl px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft", className)}
+      className={cn("rounded-xl px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-all duration-200 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft", className)}
       {...props}
     />
   );
@@ -102,11 +102,11 @@ export const MenuTrigger = MenuP.Trigger;
 export function MenuContent({ className, ...props }: React.ComponentProps<typeof MenuP.Content>) {
   return (
     <MenuP.Portal>
-      <MenuP.Content sideOffset={8} className={cn("z-50 min-w-64 rounded-2xl border border-border bg-card p-1.5 shadow-lift", className)} {...props} />
+      <MenuP.Content sideOffset={8} className={cn("z-50 min-w-64 origin-[var(--radix-dropdown-menu-content-transform-origin)] rounded-2xl border border-border bg-card p-1.5 shadow-lift data-[state=closed]:animate-pop-out data-[state=open]:animate-pop-in", className)} {...props} />
     </MenuP.Portal>
   );
 }
 
 export function MenuItem({ className, ...props }: React.ComponentProps<typeof MenuP.Item>) {
-  return <MenuP.Item className={cn("flex cursor-pointer select-none items-start gap-3 rounded-xl px-3 py-2.5 outline-none data-[highlighted]:bg-primary-soft", className)} {...props} />;
+  return <MenuP.Item className={cn("flex cursor-pointer select-none items-start gap-3 rounded-xl px-3 py-2.5 outline-none transition-colors data-[highlighted]:bg-primary-soft", className)} {...props} />;
 }

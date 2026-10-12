@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, { params }: Ctx<{ id: string }>) {
   const row = await get<Record<string, unknown>>(
     `SELECT p.*, d.text AS draft_text, r.organisation AS organisation,
-       (SELECT CASE WHEN p.platform = 'facebook' THEN i.facebook ELSE i.linkedin END FROM images i WHERE i.run_id = p.run_id ORDER BY i.created_at DESC LIMIT 1) AS image
+       (SELECT CASE WHEN p.platform = 'facebook' THEN i.facebook ELSE i.linkedin END FROM images i WHERE i.run_id = p.run_id ORDER BY i.created_at DESC LIMIT 1) AS image,
+       (SELECT v.file FROM videos v WHERE v.run_id = p.run_id AND r.media = 'video' ORDER BY v.created_at DESC LIMIT 1) AS video,
+       (SELECT v.poster FROM videos v WHERE v.run_id = p.run_id AND r.media = 'video' ORDER BY v.created_at DESC LIMIT 1) AS poster
      FROM posts p JOIN drafts d ON d.id = p.draft_id JOIN runs r ON r.id = p.run_id WHERE p.id = ?`,
     (await params).id,
   );
@@ -21,6 +23,7 @@ export async function GET(_req: Request, { params }: Ctx<{ id: string }>) {
     text: row.draft_text,
     organisation: row.organisation,
     image: row.image ? `/api/images/${row.image}` : null,
+    video: row.video ? { url: `/api/videos/${row.video}`, poster: `/api/videos/${row.poster}` } : null,
     engagement: await engagementFor(post),
   });
 }

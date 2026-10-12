@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api, cn } from "@/lib/utils";
+import { spring } from "@/lib/motion";
 
 const SERVICES = [
   { id: "n8n", name: "n8n", icon: Workflow, why: "Runs every agent workflow. Required." },
-  { id: "openrouter", name: "OpenRouter", icon: KeyRound, why: "AI text and images. Required." },
+  { id: "openrouter", name: "OpenRouter", icon: KeyRound, why: "AI text, images and videos. Required." },
   { id: "telegram", name: "Telegram", icon: Smartphone, why: "Approve drafts from your phone. Optional." },
   { id: "facebook", name: "Facebook Page", icon: Users, why: "Real publishing. Not needed in Mock mode." },
   { id: "linkedin", name: "LinkedIn", icon: Briefcase, why: "Real publishing. Not needed in Mock mode." },
@@ -36,10 +37,10 @@ export default function SettingsPage() {
   const okCount = SERVICES.filter((s) => { const r = results[s.id]; return r && r !== "loading" && r.ok; }).length;
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-6 sm:gap-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Settings & connections</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Settings & connections</h1>
           {/* <p className="mt-1 text-lg text-muted-foreground">Check everything before the audience arrives. Keys live in the <code className="rounded bg-muted px-1.5">.env</code> file.</p> */}
         </div>
         <Button variant="primary" size="lg" onClick={() => testAll()}><RefreshCw /> Test all</Button>
@@ -57,19 +58,19 @@ export default function SettingsPage() {
               const state = r === "loading" || r === undefined ? "loading" : r === null ? "idle" : r.ok ? "ok" : r.configured === false ? "unset" : "bad";
               return (
                 <motion.div key={s.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  className={cn("flex flex-wrap items-center gap-4 rounded-2xl border-2 p-4", state === "ok" ? "border-success/30 bg-success-soft/50" : state === "bad" ? "border-danger/25 bg-danger-soft/50" : "border-border")}>
-                  <span className="grid size-12 place-items-center rounded-2xl bg-card shadow-soft"><s.icon className="size-6 text-primary" /></span>
+                  className={cn("flex flex-wrap items-center gap-3 rounded-2xl border-2 p-3 transition-colors duration-500 sm:gap-4 sm:p-4", state === "ok" ? "border-success/30 bg-success-soft/50" : state === "bad" ? "border-danger/25 bg-danger-soft/50" : "border-border")}>
+                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-card shadow-soft sm:size-12"><s.icon className="size-6 text-primary" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-bold">{s.name}</p>
                     <p className="text-muted-foreground">{state === "ok" || state === "bad" || state === "unset" ? (r as { message: string }).message : s.why}</p>
                   </div>
-                  <span className="flex items-center gap-2 font-semibold">
+                  <motion.span key={state} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={spring} className="flex items-center gap-2 font-semibold">
                     {state === "loading" && <><Loader2 className="size-6 animate-spin text-muted-foreground" /> Testing</>}
                     {state === "ok" && <><CheckCircle2 className="size-6 text-success" /> Connected</>}
                     {state === "bad" && <><XCircle className="size-6 text-danger" /> Not connected</>}
                     {state === "idle" && <><CircleDashed className="size-6 text-muted-foreground" /> Not tested</>}
                     {state === "unset" && <><CircleDashed className="size-6 text-muted-foreground" /> Not set up</>}
-                  </span>
+                  </motion.span>
                   <Button variant="secondary" loading={state === "loading"} onClick={() => test(s.id)}>Test</Button>
                 </motion.div>
               );
@@ -80,10 +81,11 @@ export default function SettingsPage() {
         <div className="grid content-start gap-6">
           <Card>
             <CardHeader><CardTitle>Current modes</CardTitle><CardDescription>Change them in the header at any time.</CardDescription></CardHeader>
-            <CardContent className="grid gap-3 text-lg">
+            <CardContent className="grid gap-3 text-base sm:text-lg">
               <p className="flex items-center justify-between gap-3"><span className="flex items-center gap-2"><Bot className="size-5 text-primary" /> Model</span><Badge tone="primary">{config?.models.find((m) => m.id === settings?.model)?.label ?? settings?.model}</Badge></p>
-              <p className="flex items-center justify-between gap-3"><span>Image model</span><Badge>{config?.imageModel || "not set"}</Badge></p>
-              <p className="flex items-center justify-between gap-3"><span>Publishing</span><Badge tone={settings?.mock ? "accent" : "primary"}>{settings?.mock ? "Mock" : "Real"}</Badge></p>
+              <p className="flex items-center justify-between gap-3"><span>Image model</span><Badge className="min-w-0 truncate">{config?.imageModel || "not set"}</Badge></p>
+              <p className="flex items-center justify-between gap-3"><span>Video model</span><Badge className="min-w-0 truncate">{config?.videoModel || "not set"}</Badge></p>
+              <p className="flex items-center justify-between gap-3"><span>Publishing</span><Badge tone={settings?.mock ? "neutral" : "primary"}>{settings?.mock ? "Mock" : "Real"}</Badge></p>
               <p className="flex items-center justify-between gap-3"><span>Telegram approval</span><Badge tone={settings?.telegram ? "success" : "neutral"}>{settings?.telegram ? "On" : "Off"}</Badge></p>
               <p className="flex items-center justify-between gap-3"><span>Demo trap</span><Badge tone={settings?.trap ? "danger" : "neutral"}>{settings?.trap ? "On" : "Off"}</Badge></p>
             </CardContent>

@@ -57,25 +57,42 @@ export function HighlightedText({ text, flags, trap }: { text: string; flags: Sa
 function Avatar({ name, square }: { name: string; square?: boolean }) {
   const initials = name.split(/\s+/).filter((w) => /^[A-ZÀ-Ý]/.test(w)).slice(0, 2).map((w) => w[0]).join("") || "PP";
   return (
-    <span className={cn("grid size-12 shrink-0 place-items-center bg-gradient-to-br from-[#3730A3] to-[#0284C7] text-lg font-extrabold text-white", square ? "rounded-xl" : "rounded-full")}>
+    <span className={cn("grid size-12 shrink-0 place-items-center bg-brand text-lg font-extrabold text-white", square ? "rounded-xl" : "rounded-full")}>
       {initials}
     </span>
   );
 }
 
-function PostImage({ src, loading }: { src?: string | null; loading?: boolean }) {
+export interface PreviewVideo { url: string; poster: string }
+
+interface PreviewProps {
+  organisation: string;
+  children: React.ReactNode;
+  image?: string | null;
+  // A video replaces the image (video runs)
+  video?: PreviewVideo | null;
+  imageLoading?: boolean;
+  isVideo?: boolean;
+}
+
+function PostMedia({ src, video, loading, isVideo }: { src?: string | null; video?: PreviewVideo | null; loading?: boolean; isVideo?: boolean }) {
+  if (video) {
+    return <video key={video.url} src={video.url} poster={video.poster} controls playsInline muted loop preload="metadata" className="aspect-video w-full bg-black object-contain" />;
+  }
   if (loading || !src) {
     return (
-      <div className="relative aspect-[1200/630] w-full overflow-hidden">
+      <div className={cn("relative w-full overflow-hidden", isVideo ? "aspect-video" : "aspect-[1200/630]")}>
         <Skeleton className="absolute inset-0 rounded-none" />
-        <span className="absolute inset-0 grid place-items-center text-sm font-semibold text-muted-foreground">{loading ? "Painting the image…" : "No image"}</span>
+        <span className="absolute inset-0 grid place-items-center text-sm font-semibold text-muted-foreground">
+          {loading ? (isVideo ? "Filming the video…" : "Painting the image…") : isVideo ? "No video" : "No image"}
+        </span>
       </div>
     );
   }
   return <motion.img key={src} src={src} alt="Event illustration" initial={{ opacity: 0, scale: 1.02 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }} className="aspect-[1200/630] w-full object-cover" />;
 }
 
-export function FacebookPreview({ organisation, children, image, imageLoading }: { organisation: string; children: React.ReactNode; image?: string | null; imageLoading?: boolean }) {
+export function FacebookPreview({ organisation, children, image, video, imageLoading, isVideo }: PreviewProps) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-3 p-4">
@@ -86,21 +103,21 @@ export function FacebookPreview({ organisation, children, image, imageLoading }:
         </div>
       </div>
       <div className="px-4 pb-3">{children}</div>
-      <PostImage src={image} loading={imageLoading} />
+      <PostMedia src={image} video={video} loading={imageLoading} isVideo={isVideo} />
       <div className="flex items-center justify-between px-4 py-2.5 text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="grid size-5 place-items-center rounded-full bg-[#1877F2] text-white"><ThumbsUp className="size-3" /></span> Be the first to react</span>
         <span>0 comments</span>
       </div>
       <div className="mx-4 grid grid-cols-3 border-t border-border py-1 text-muted-foreground">
         {[{ i: ThumbsUp, l: "Like" }, { i: MessageCircle, l: "Comment" }, { i: Share2, l: "Share" }].map(({ i: I, l }) => (
-          <span key={l} className="flex items-center justify-center gap-2 rounded-lg py-2 font-semibold"><I className="size-5" />{l}</span>
+          <span key={l} className="flex items-center justify-center gap-2 rounded-lg py-2 font-semibold"><I className="size-5" /><span className="hidden min-[400px]:inline">{l}</span></span>
         ))}
       </div>
     </div>
   );
 }
 
-export function LinkedInPreview({ organisation, children, image, imageLoading }: { organisation: string; children: React.ReactNode; image?: string | null; imageLoading?: boolean }) {
+export function LinkedInPreview({ organisation, children, image, video, imageLoading, isVideo }: PreviewProps) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-3 p-4">
@@ -112,10 +129,10 @@ export function LinkedInPreview({ organisation, children, image, imageLoading }:
         </div>
       </div>
       <div className="px-4 pb-3">{children}</div>
-      <PostImage src={image} loading={imageLoading} />
+      <PostMedia src={image} video={video} loading={imageLoading} isVideo={isVideo} />
       <div className="mx-4 grid grid-cols-4 border-t border-border py-1 text-muted-foreground">
         {[{ i: ThumbsUp, l: "Like" }, { i: MessageCircle, l: "Comment" }, { i: Repeat2, l: "Repost" }, { i: Send, l: "Send" }].map(({ i: I, l }) => (
-          <span key={l} className="flex items-center justify-center gap-2 rounded-lg py-2 font-semibold"><I className="size-5" />{l}</span>
+          <span key={l} className="flex items-center justify-center gap-2 rounded-lg py-2 font-semibold"><I className="size-5" /><span className="hidden min-[400px]:inline">{l}</span></span>
         ))}
       </div>
     </div>

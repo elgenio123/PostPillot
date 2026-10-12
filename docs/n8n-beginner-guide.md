@@ -84,11 +84,12 @@ Double-click any node to open it. You will see its **input** on the left, its **
     - **Paint image (Pollinations)**: a free service, no key needed.
     - **Got a Pollinations image?** If yes, **Save Pollinations image in app**. If no, **Use the template image**: the app draws a branded picture with the event title and date. This never fails.
 17. The app crops the image for Facebook (1200×630) and LinkedIn (1200×627).
+18. **Video runs** (Visual = Video on the brief page) take the **Video post?** branch first. **Start the video (OpenRouter)** creates a video job, then **Wait 20 s** → **Check video status** repeats until the video is ready (a loop you can watch live in *Executions*). **Save video in app** stores it. If anything fails, the workflow paints an image instead (steps 15–16) and the app turns it into a slow-zoom video, so a video run always ends with a video.
 
 **Part 4: Safety check**
-18. **Prepare safety check** → **Safety check with AI**: a second AI call compares each draft with the brief and the school safety rules.
-19. **Read flags & hide the demo trap**: reads the warnings. If the demo trap is on, it removes the warning that points at the planted mistake, so the human has to find it.
-20. **Tell app: safety done**: the app highlights the flagged words and asks the human to decide.
+19. **Prepare safety check** → **Safety check with AI**: a second AI call compares each draft with the brief and the school safety rules.
+20. **Read flags & hide the demo trap**: reads the warnings. If the demo trap is on, it removes the warning that points at the planted mistake, so the human has to find it.
+21. **Tell app: safety done**: the app highlights the flagged words and asks the human to decide.
 
 ### 4.2 PostPilot – Redraft
 

@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Bot, ExternalLink, ImageIcon, Rocket, Send, ShieldCheck, Target, Workflow } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, Clapperboard, ExternalLink, ImageIcon, Rocket, Send, ShieldCheck, Target, Workflow } from "lucide-react";
 import { useLiveEvents } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Tip } from "@/components/ui/controls";
 import { Timeline } from "@/components/run/timeline";
 import { Review } from "@/components/run/review";
 import { Publish } from "@/components/run/publish";
-import type { RunDetail } from "@/lib/types";
+import { VIDEO_SOURCE_LABEL, type RunDetail } from "@/lib/types";
 import { api, cn } from "@/lib/utils";
 
 type Stage = "work" | "review" | "publish";
@@ -87,29 +87,31 @@ export default function RunPage() {
   }
 
   const imageStep = run.events.filter((e) => e.step === "image").at(-1);
+  const isVideo = run.media === "video";
   const approvedCount = run.platforms.filter((p) => run.drafts.filter((d) => d.platform === p).at(-1)?.status === "approved").length;
   const stageEnabled = (s: Stage) => s === "work" || run.drafts.length > 0;
 
   return (
-    <div className="grid gap-7">
+    <div className="grid gap-5 sm:gap-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge tone="primary">{run.organisation}</Badge>
-            <Badge tone={run.mock ? "accent" : "primary"}><Send /> {run.mock ? "Mock publishing" : "Real publishing"}</Badge>
+            <Badge tone={run.mock ? "neutral" : "primary"}><Send /> {run.mock ? "Mock publishing" : "Real publishing"}</Badge>
             {run.trap && <Badge tone="danger"><Target /> Demo trap on</Badge>}
             <Badge><Bot /> {run.model}</Badge>
+            {isVideo && <Badge tone="primary"><Clapperboard /> {run.videoSeconds} s video</Badge>}
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">{run.title ?? "New post run"}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl md:text-4xl">{run.title ?? "New post run"}</h1>
         </div>
         <Tip content="Opens this run in the n8n editor (log in with the n8n owner account)">
-          <Button asChild variant="secondary" size="lg">
+          <Button asChild variant="secondary" size="lg" className="max-sm:h-11 max-sm:w-full max-sm:px-5 max-sm:text-base">
             <a href={run.executionUrl ?? run.workflowUrl} target="_blank" rel="noreferrer"><Workflow /> See the workflow <ExternalLink className="opacity-60" /></a>
           </Button>
         </Tip>
       </div>
 
-      <nav className="grid gap-3 sm:grid-cols-3" aria-label="Steps">
+      <nav className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Steps">
         {STAGES.map((s, i) => {
           const active = stage === s.id;
           const enabled = stageEnabled(s.id);
@@ -119,22 +121,22 @@ export default function RunPage() {
               disabled={!enabled}
               onClick={() => setStage(s.id)}
               className={cn(
-                "relative flex items-center gap-4 overflow-hidden rounded-2xl border-2 p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50",
+                "relative flex flex-col items-center gap-1.5 overflow-hidden rounded-2xl border-2 p-2.5 text-center transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:gap-4 sm:p-4 sm:text-left",
                 active ? "border-primary bg-card shadow-lift" : "border-transparent bg-muted hover:bg-card",
               )}
             >
-              <span className={cn("grid size-12 shrink-0 place-items-center rounded-xl text-lg font-extrabold", active ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
+              <span className={cn("grid size-9 shrink-0 place-items-center rounded-xl text-base font-extrabold sm:size-12 sm:text-lg", active ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
                 {i + 1}
               </span>
               <span>
-                <span className="block text-lg font-bold">{s.label}</span>
-                <span className="text-sm text-muted-foreground">
+                <span className="block text-sm font-bold leading-tight sm:text-lg">{s.label}</span>
+                <span className="hidden text-sm text-muted-foreground sm:inline">
                   {s.id === "work" && (run.status === "generating" ? "Running…" : run.status === "failed" ? "Stopped with an error" : "Finished")}
                   {s.id === "review" && `${approvedCount} of ${run.platforms.length} approved`}
                   {s.id === "publish" && `${run.posts.filter((p) => p.status === "published").length} published`}
                 </span>
               </span>
-              {active && <motion.span layoutId="stage-bar" className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-primary via-[#0EA5E9] to-accent" />}
+              {active && <motion.span layoutId="stage-bar" className="absolute inset-x-0 bottom-0 h-1 bg-brand" />}
             </button>
           );
         })}
@@ -143,21 +145,34 @@ export default function RunPage() {
       <AnimatePresence mode="wait">
         <motion.div key={stage} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25 }}>
           {stage === "work" && (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
-              <Card className="p-7">
+            <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+              <Card className="p-4 sm:p-7">
                 <Timeline run={run} />
                 {run.error && <p className="mt-2 rounded-2xl bg-danger-soft p-4 text-danger"><strong>The run stopped:</strong> {run.error}</p>}
                 {run.status !== "generating" && run.drafts.length > 0 && (
                   <div className="flex justify-end">
-                    <Button variant="accent" size="lg" onClick={() => setStage("review")}>Review the drafts <ArrowRight /></Button>
+                    <Button variant="primary" size="lg" onClick={() => setStage("review")}>Review the drafts <ArrowRight /></Button>
                   </div>
                 )}
               </Card>
               <div className="grid content-start gap-6">
                 <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Event image</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      {isVideo ? <Clapperboard className="size-5 text-primary" /> : <ImageIcon className="size-5 text-primary" />} Event {isVideo ? "video" : "image"}
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent>
-                    {run.image ? (
+                    {isVideo && run.video ? (
+                      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
+                        <video src={run.video.url} poster={run.video.poster} controls playsInline muted loop preload="metadata" className="aspect-video w-full rounded-2xl bg-black object-contain shadow-soft" />
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Badge tone={run.video.source === "openrouter" ? "primary" : "neutral"}>{VIDEO_SOURCE_LABEL[run.video.source] ?? run.video.source}</Badge>
+                          {run.video.seconds && <Badge>{Math.round(run.video.seconds)} s</Badge>}
+                          {run.video.note && <span className="text-sm text-muted-foreground">{run.video.note}</span>}
+                        </div>
+                      </motion.div>
+                    ) : !isVideo && run.image ? (
                       <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
                         <img src={run.image.original} alt="Generated event illustration" className="aspect-[1200/630] w-full rounded-2xl object-cover shadow-soft" />
                         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -166,10 +181,12 @@ export default function RunPage() {
                         </div>
                       </motion.div>
                     ) : (
-                      <div className="relative aspect-[1200/630] overflow-hidden rounded-2xl">
+                      <div className={cn("relative overflow-hidden rounded-2xl", isVideo ? "aspect-video" : "aspect-[1200/630]")}>
                         <Skeleton className="absolute inset-0 rounded-2xl" />
-                        <span className="absolute inset-0 grid place-items-center font-semibold text-muted-foreground">
-                          {imageStep?.status === "running" ? "Painting the image…" : "The image comes after the drafts"}
+                        <span className="absolute inset-0 grid place-items-center px-4 text-center font-semibold text-muted-foreground">
+                          {imageStep?.status === "running"
+                            ? isVideo ? "Filming the video… usually 1 to 2 minutes" : "Painting the image…"
+                            : `The ${isVideo ? "video" : "image"} comes after the drafts`}
                         </span>
                       </div>
                     )}
@@ -177,7 +194,7 @@ export default function RunPage() {
                 </Card>
                 <Card>
                   <CardHeader><CardTitle>The brief</CardTitle></CardHeader>
-                  <CardContent><p className="whitespace-pre-line text-lg leading-relaxed text-muted-foreground">{run.brief}</p></CardContent>
+                  <CardContent><p className="whitespace-pre-line text-base leading-relaxed text-muted-foreground sm:text-lg">{run.brief}</p></CardContent>
                 </Card>
               </div>
             </div>
@@ -187,7 +204,7 @@ export default function RunPage() {
               <Review run={run} onChanged={load} />
               {approvedCount > 0 && (
                 <div className="flex justify-end">
-                  <Button variant="accent" size="lg" onClick={() => setStage("publish")}>Go to publishing <ArrowRight /></Button>
+                  <Button variant="primary" size="lg" onClick={() => setStage("publish")}>Go to publishing <ArrowRight /></Button>
                 </div>
               )}
             </div>

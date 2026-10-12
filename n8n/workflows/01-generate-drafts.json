@@ -538,9 +538,9 @@
     },
     {
       "parameters": {
-        "content": "### 3. Paint one image\nOne image for the whole brief (the app crops it for each platform).\n1. The AI describes the picture.\n2. **OpenRouter** image model paints it.\n3. If that fails: free **Pollinations.ai**.\n4. If that fails too: the app draws a **branded template**. This step never fails.",
+        "content": "### 3. Paint one image\nOne image for the whole brief (the app crops it for each platform).\n1. The AI describes the picture.\n2. **OpenRouter** image model paints it.\n3. If that fails: free **Pollinations.ai**.\n4. If that fails too: the app draws a **branded template**. This step never fails.\n\nFor a **video** run the app animates this image when the AI video failed.",
         "width": 2240,
-        "height": 520,
+        "height": 560,
         "color": 6
       },
       "id": "59619fd4-a6f4-fd7a-7d7f-a8d7ac0d7a27",
@@ -583,7 +583,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: 'Imagining a picture for the event', executionId: $execution.id, workflow: $workflow.id }) }}"
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: $('Brief received').first().json.body.media === 'video' ? 'Imagining a video scene for the event' : 'Imagining a picture for the event', executionId: $execution.id, workflow: $workflow.id }) }}"
       },
       "id": "6cf515db-6160-f645-6d50-0af05d277f1e",
       "name": "Tell app: creating image",
@@ -639,7 +639,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const ctx = $(\"All drafts written\").item.json;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst fallbackTitle = ctx.brief.split(/[.!?]/)[0].split(/\\s+/).slice(0, 6).join(\" \");\nreturn {\n  json: {\n    runId: ctx.runId,\n    imagePrompt: p?.image_prompt || \"Bright flat illustration of a school event in Cameroon: \" + ctx.brief.slice(0, 200),\n    title: p?.title || fallbackTitle,\n    date: p?.date || \"\",\n    cost: $json.usage?.cost ?? 0,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
+        "jsCode": "const ctx = $(\"All drafts written\").first().json;\nconst req = $(\"Brief received\").first().json.body;\nconst p = readJson($json.choices?.[0]?.message?.content);\nconst fallbackTitle = ctx.brief.split(/[.!?]/)[0].split(/\\s+/).slice(0, 6).join(\" \");\nconst imagePrompt = p?.image_prompt || \"Bright flat illustration of a school event in Cameroon: \" + ctx.brief.slice(0, 200);\nreturn {\n  json: {\n    runId: ctx.runId,\n    media: req.media === \"video\" ? \"video\" : \"image\",\n    seconds: Number(req.videoSeconds) || 5,\n    imagePrompt,\n    videoPrompt: p?.video_prompt || \"Slow cinematic camera move over this scene: \" + imagePrompt,\n    title: p?.title || fallbackTitle,\n    date: p?.date || \"\",\n    cost: $json.usage?.cost ?? 0,\n  },\n};\n\nfunction readJson(content) {\n  if (!content) return null;\n  const s = String(content).trim().replace(/^```(?:json)?\\s*/i, \"\").replace(/```\\s*$/, \"\");\n  try { return JSON.parse(s); } catch (e) {}\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }\n  return null;\n}"
       },
       "id": "2bba7f4d-edeb-9e5c-60cc-9572d300eff3",
       "name": "Read image description",
@@ -676,7 +676,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: $env.IMAGE_MODEL, messages: [{ role: 'user', content: 'Create a landscape 16:9 image. ' + $json.imagePrompt }], modalities: ['image', 'text'], usage: { include: true } }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: $env.IMAGE_MODEL, messages: [{ role: 'user', content: 'Create a landscape 16:9 image. ' + $('Read image description').first().json.imagePrompt }], modalities: ['image', 'text'], usage: { include: true } }) }}"
       },
       "id": "636e53cc-785b-a0de-a43d-a78aeb4be484",
       "name": "Paint image (OpenRouter)",
@@ -731,7 +731,7 @@
         "method": "POST",
         "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
         "options": {
-          "timeout": 60000
+          "timeout": 300000
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -744,7 +744,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').item.json.runId, source: 'openrouter', dataUrl: $json.choices[0].message.images[0].image_url.url, prompt: $('Read image description').item.json.imagePrompt, title: $('Read image description').item.json.title, date: $('Read image description').item.json.date }) }}"
+        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').first().json.runId, source: 'openrouter', dataUrl: $json.choices[0].message.images[0].image_url.url, prompt: $('Read image description').first().json.imagePrompt, title: $('Read image description').first().json.title, date: $('Read image description').first().json.date, aiCost: $json.usage?.cost ?? 0 }) }}"
       },
       "id": "2d86c533-8ee4-b7fd-03e8-7b72c2ae7ed0",
       "name": "Save image in app",
@@ -759,7 +759,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.POLLINATIONS_URL.replace('{prompt}', encodeURIComponent($('Read image description').item.json.imagePrompt)) }}",
+        "url": "={{ $env.POLLINATIONS_URL.replace('{prompt}', encodeURIComponent($('Read image description').first().json.imagePrompt)) }}",
         "options": {
           "timeout": 90000,
           "response": {
@@ -820,7 +820,7 @@
         "method": "POST",
         "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
         "options": {
-          "timeout": 60000
+          "timeout": 300000
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -839,7 +839,7 @@
           "parameters": [
             {
               "name": "runId",
-              "value": "={{ $('Read image description').item.json.runId }}"
+              "value": "={{ $('Read image description').first().json.runId }}"
             },
             {
               "name": "source",
@@ -847,11 +847,11 @@
             },
             {
               "name": "title",
-              "value": "={{ $('Read image description').item.json.title }}"
+              "value": "={{ $('Read image description').first().json.title }}"
             },
             {
               "name": "date",
-              "value": "={{ $('Read image description').item.json.date }}"
+              "value": "={{ $('Read image description').first().json.date }}"
             }
           ]
         }
@@ -871,7 +871,7 @@
         "method": "POST",
         "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
         "options": {
-          "timeout": 30000
+          "timeout": 300000
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -884,7 +884,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').item.json.runId, source: 'template', title: $('Read image description').item.json.title, date: $('Read image description').item.json.date, note: 'OpenRouter image ' + (/429/.test(JSON.stringify($('Paint image (OpenRouter)').item.json)) ? 'busy (rate limit)' : 'failed') + ', Pollinations ' + (/429/.test(JSON.stringify($json)) ? 'busy (rate limit)' : 'failed') + ': template used' }) }}"
+        "jsonBody": "={{ JSON.stringify({ runId: $('Read image description').first().json.runId, source: 'template', title: $('Read image description').first().json.title, date: $('Read image description').first().json.date, note: 'OpenRouter image ' + (/429/.test(JSON.stringify($('Paint image (OpenRouter)').first().json)) ? 'busy (rate limit)' : 'failed') + ', Pollinations ' + (/429/.test(JSON.stringify($json)) ? 'busy (rate limit)' : 'failed') + ': template used' }) }}"
       },
       "id": "c6761b7e-2d5f-6928-fd0f-213a08e2ddbc",
       "name": "Use the template image",
@@ -899,7 +899,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').item.json.runId }}/events",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').first().json.runId }}/events",
         "options": {
           "timeout": 30000
         },
@@ -914,7 +914,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ step: 'image', status: $json.source ? 'done' : 'failed', message: $json.source ? 'Image ready from ' + ({ openrouter: 'OpenRouter AI', pollinations: 'Pollinations.ai', template: 'the branded template' })[$json.source] : 'The image could not be saved', data: { title: $('Read image description').item.json.title }, cost: $('Read image description').item.json.cost + ($('Paint image (OpenRouter)').item.json.usage?.cost ?? 0), executionId: $execution.id, workflow: $workflow.id }) }}"
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: $json.message ? 'done' : 'failed', message: $json.message || 'The picture could not be saved', data: { title: $('Read image description').first().json.title }, cost: $('Read image description').first().json.cost + Number($json.aiCost || 0), executionId: $execution.id, workflow: $workflow.id }) }}"
       },
       "id": "9f3dd2a6-47a9-57c2-f2fd-1be5df733efb",
       "name": "Tell app: image ready",
@@ -928,13 +928,500 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8338bd03-4ee0-45aa-c167-7ac33b825ef2",
+              "leftValue": "={{ $json.media === 'video' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8461e715-438d-c8e3-4eab-ed5f502dbd61",
+      "name": "Video post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        780
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3b. Film a video (video runs only)\n1. **Start the video** sends the scene to the OpenRouter video model (`VIDEO_MODEL`).\n2. Video models take minutes, so we **wait 20 s and ask again** until it is ready (max 12 min).\n3. The video is downloaded and saved in the app, which converts it for Facebook and LinkedIn.\n4. If the model fails, we **paint an image instead** (section 3) and the app animates it.",
+        "width": 2420,
+        "height": 860,
+        "color": 2
+      },
+      "id": "544673db-8d9d-c7b1-0575-844260c3838e",
+      "name": "Note 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').first().json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: 'Filming a ' + $('Read image description').first().json.seconds + ' s video with ' + ($env.VIDEO_MODEL || 'x-ai/grok-imagine-video-1.5-lite') + '. This takes a minute or two', executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "ca2589c1-9a17-0dc3-450a-8a87edaf5cf5",
+      "name": "Tell app: filming",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/videos",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "X-Title",
+              "value": "PostPilot"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.VIDEO_MODEL || 'x-ai/grok-imagine-video-1.5-lite', prompt: $('Read image description').first().json.videoPrompt, duration: $('Read image description').first().json.seconds, aspect_ratio: '16:9', resolution: $env.VIDEO_RESOLUTION || '480p' }) }}"
+      },
+      "id": "708471ab-b2d5-8232-c7da-45722e3467de",
+      "name": "Start the video (OpenRouter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const id = $json.id;\nconst err = $json.error;\n// n8n reports HTTP errors as: 400 - \"{\\\"error\\\":{\\\"message\\\":\\\"...\\\"}}\"; keep only OpenRouter's message\nconst raw = typeof err === \"string\" ? err : err?.message ?? JSON.stringify(err ?? $json);\nconst inner = /message\\\\?\":\\s*\\\\?\"([^\"\\\\]+)/.exec(raw);\nreturn {\n  json: {\n    jobId: id ?? null,\n    pollingUrl: $json.polling_url || (id ? \"https://openrouter.ai/api/v1/videos/\" + id : null),\n    ok: !!id,\n    error: id ? null : (inner ? inner[1] : raw).slice(0, 200),\n  },\n};"
+      },
+      "id": "329a1d6e-186e-7a5b-a50e-10c2d24b5d79",
+      "name": "Read video job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0aeec6ed-9b39-f7eb-ca31-6c18ec795921",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9e2a9f0e-3223-7c42-fdb4-223d7186bf01",
+      "name": "Video job started?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "28cd2aba-349b-241b-525b-94211d646aa2",
+      "name": "Wait 20 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3300,
+        440
+      ],
+      "webhookId": "9c3e4a55-7d0f-4b2a-c3e4-4d5e6f7a8b03"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Read video job').first().json.pollingUrl }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            }
+          ]
+        }
+      },
+      "id": "6fb95fef-c5c8-44c7-9f57-e52b3fd7a319",
+      "name": "Check video status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        440
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// $runIndex counts how many times we already asked: 36 × 20 s = 12 minutes\nconst job = $(\"Read video job\").first().json;\nconst attempt = $runIndex + 1;\nconst status = $json.status ?? \"unknown\";\nconst url = $json.unsigned_urls?.[0] ?? (status === \"completed\" ? \"https://openrouter.ai/api/v1/videos/\" + job.jobId + \"/content?index=0\" : null);\nconst failed = [\"failed\", \"cancelled\", \"expired\"].includes(status);\nconst tooLong = attempt >= 36;\nconst err = $json.error;\nconst waited = attempt * 20;\nreturn {\n  json: {\n    ...job,\n    status,\n    done: status === \"completed\" && !!url,\n    stop: failed || tooLong,\n    url,\n    cost: $json.usage?.cost ?? 0,\n    error: failed ? (typeof err === \"string\" ? err : err?.message ?? \"the video model failed\") : tooLong ? \"it took more than 12 minutes\" : null,\n    message: \"Filming… \" + Math.floor(waited / 60) + \" min \" + String(waited % 60).padStart(2, \"0\") + \" s so far (\" + status.replace(\"_\", \" \") + \")\",\n  },\n};"
+      },
+      "id": "214b8099-714f-8387-3db2-3c3cf22c345b",
+      "name": "Read video status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4f88d0f8-d30e-5e72-2c90-24eaef3b5186",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1b4e4475-e985-cd32-486f-fbf5c547119b",
+      "name": "Video finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3960,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d6ea1fc2-5d96-ac1c-8102-e5a577e94722",
+              "leftValue": "={{ !$json.stop }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1ebee744-45c1-636f-fb29-c8e89ad52582",
+      "name": "Keep waiting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4180,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').first().json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: $json.message, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "507188c5-5487-5be9-3cee-e53c8289b567",
+      "name": "Tell app: still filming",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4400,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            }
+          ]
+        }
+      },
+      "id": "1c1c1fa1-b4c5-73fd-f47c-7bcc58bd05a6",
+      "name": "Download the video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f2ad92ec-f3f9-1497-af73-1c89aa81b13d",
+              "leftValue": "={{ !!$binary.data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "58c22b69-b420-fd43-df0f-af91e831a8f6",
+      "name": "Got the video file?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/videos",
+        "options": {
+          "timeout": 300000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "runId",
+              "value": "={{ $('Read image description').first().json.runId }}"
+            },
+            {
+              "name": "source",
+              "value": "openrouter"
+            },
+            {
+              "name": "title",
+              "value": "={{ $('Read image description').first().json.title }}"
+            },
+            {
+              "name": "date",
+              "value": "={{ $('Read image description').first().json.date }}"
+            },
+            {
+              "name": "aiCost",
+              "value": "={{ $('Read video status').last().json.cost }}"
+            }
+          ]
+        }
+      },
+      "id": "98caa5ab-8e1a-cb9e-e062-701c97c100e3",
+      "name": "Save video in app",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const err = $json.error;\nconst why = typeof err === \"string\" ? err : err?.message ?? (err ? JSON.stringify(err) : \"no video file\");\nreturn { json: { message: \"The video model did not deliver (\" + String(why).slice(0, 140) + \"). Animating an image instead\" } };"
+      },
+      "id": "ecf8d978-21d5-94d1-bbd6-8a0329e68d0c",
+      "name": "Video failed: use an image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').first().json.runId }}/events",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ step: 'image', status: 'running', message: $json.message, executionId: $execution.id, workflow: $workflow.id }) }}"
+      },
+      "id": "04a56cd4-6aa4-f12f-f6bf-72d2d44134e3",
+      "name": "Tell app: video failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "content": "### 4. Safety check\nA second AI reads all drafts against the brief and the school safety rules (student names, photos of minors, personal data, promises, wrong dates).\nIf the demo trap is on, we **hide** the warning about the planted mistake: the human must find it.",
         "width": 1180,
         "height": 520,
         "color": 3
       },
-      "id": "544673db-8d9d-c7b1-0575-844260c3838e",
-      "name": "Note 5",
+      "id": "2618a170-cd5f-67f0-cd9e-39c48e3fede8",
+      "name": "Note 6",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -945,7 +1432,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').item.json.runId }}/events",
+        "url": "={{ $env.APP_INTERNAL_URL }}/api/internal/runs/{{ $('Read image description').first().json.runId }}/events",
         "options": {
           "timeout": 30000
         },
@@ -975,7 +1462,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const ctx = $(\"All drafts written\").item.json;\nconst prompts = $(\"Load prompts\").first().json.prompts;\nconst drafts = ctx.drafts.map((d) => \"### \" + d.platform + \"\\n\" + d.text).join(\"\\n\\n\");\nreturn {\n  json: {\n    runId: ctx.runId,\n    model: ctx.model,\n    drafts: ctx.drafts,\n    messages: [\n      { role: \"system\", content: prompts[\"safety-check\"] + \"\\n\\n\" + prompts[\"safety-rules\"] },\n      { role: \"user\", content: \"Event brief:\\n\" + ctx.brief + \"\\n\\nDrafts:\\n\" + drafts },\n    ],\n  },\n};"
+        "jsCode": "const ctx = $(\"All drafts written\").first().json;\nconst prompts = $(\"Load prompts\").first().json.prompts;\nconst drafts = ctx.drafts.map((d) => \"### \" + d.platform + \"\\n\" + d.text).join(\"\\n\\n\");\nreturn {\n  json: {\n    runId: ctx.runId,\n    model: ctx.model,\n    drafts: ctx.drafts,\n    messages: [\n      { role: \"system\", content: prompts[\"safety-check\"] + \"\\n\\n\" + prompts[\"safety-rules\"] },\n      { role: \"user\", content: \"Event brief:\\n\" + ctx.brief + \"\\n\\nDrafts:\\n\" + drafts },\n    ],\n  },\n};"
       },
       "id": "7a3c5dda-25e1-1aac-b8ed-eef40d35ab8c",
       "name": "Prepare safety check",
@@ -1340,6 +1827,24 @@
       "main": [
         [
           {
+            "node": "Video post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video post?": {
+      "main": [
+        [
+          {
+            "node": "Tell app: filming",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Paint image (OpenRouter)",
             "type": "main",
             "index": 0
@@ -1432,6 +1937,199 @@
         [
           {
             "node": "Tell app: image ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: filming": {
+      "main": [
+        [
+          {
+            "node": "Start the video (OpenRouter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start the video (OpenRouter)": {
+      "main": [
+        [
+          {
+            "node": "Read video job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read video job": {
+      "main": [
+        [
+          {
+            "node": "Video job started?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video job started?": {
+      "main": [
+        [
+          {
+            "node": "Wait 20 s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Video failed: use an image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 20 s": {
+      "main": [
+        [
+          {
+            "node": "Check video status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check video status": {
+      "main": [
+        [
+          {
+            "node": "Read video status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read video status": {
+      "main": [
+        [
+          {
+            "node": "Video finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video finished?": {
+      "main": [
+        [
+          {
+            "node": "Download the video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep waiting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep waiting?": {
+      "main": [
+        [
+          {
+            "node": "Tell app: still filming",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Video failed: use an image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: still filming": {
+      "main": [
+        [
+          {
+            "node": "Wait 20 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download the video": {
+      "main": [
+        [
+          {
+            "node": "Got the video file?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got the video file?": {
+      "main": [
+        [
+          {
+            "node": "Save video in app",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Video failed: use an image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save video in app": {
+      "main": [
+        [
+          {
+            "node": "Tell app: image ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video failed: use an image": {
+      "main": [
+        [
+          {
+            "node": "Tell app: video failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell app: video failed": {
+      "main": [
+        [
+          {
+            "node": "Paint image (OpenRouter)",
             "type": "main",
             "index": 0
           }

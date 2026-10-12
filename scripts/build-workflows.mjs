@@ -149,7 +149,7 @@ function generateDrafts() {
   w.chain("Plant the demo mistake", "Read the planted mistake", "Draft is final");
   w.chain("Draft is final", "Tell app: draft ready", "Back to the loop", "One platform at a time");
 
-  w.note("### 3. Paint one image\nOne image for the whole brief (the app crops it for each platform).\n1. The AI describes the picture.\n2. **OpenRouter** image model paints it.\n3. If that fails: free **Pollinations.ai**.\n4. If that fails too: the app draws a **branded template**. This step never fails.", [1260, 1060], 2240, 520, 6);
+  w.note("### 3. Paint one image\nOne image for the whole brief (the app crops it for each platform).\n1. The AI describes the picture.\n2. **OpenRouter** image model paints it.\n3. If that fails: free **Pollinations.ai**.\n4. If that fails too: the app draws a **branded template**. This step never fails.\n\nFor a **video** run the app animates this image when the AI video failed.", [1260, 1060], 2240, 560, 6);
   w.code("All drafts written", function () {
     // The loop is finished. Continue only if at least one post was written.
     const drafts = $input.all().map((i) => i.json).filter((d) => d.ok);
@@ -166,19 +166,24 @@ function generateDrafts() {
     }];
   }, [1320, 1240], "runOnceForAllItems");
   w.connect("One platform at a time", "All drafts written", 0);
-  w.tellApp("Tell app: creating image", "$json.runId", "step: 'image', status: 'running', message: 'Imagining a picture for the event'", [1540, 1240]);
+  w.tellApp("Tell app: creating image", "$json.runId", "step: 'image', status: 'running', message: $('Brief received').first().json.body.media === 'video' ? 'Imagining a video scene for the event' : 'Imagining a picture for the event'", [1540, 1240]);
   w.ai("Describe the image", {
     model: "$('All drafts written').item.json.model",
     messages: "[{ role: 'system', content: $('Load prompts').first().json.prompts['image-prompt'] }, { role: 'user', content: 'Organisation: ' + $('All drafts written').item.json.organisation + '\\n\\nEvent brief:\\n' + $('All drafts written').item.json.brief }]",
   }, [1760, 1240]);
   w.code("Read image description", function () {
-    const ctx = $("All drafts written").item.json;
+    const ctx = $("All drafts written").first().json;
+    const req = $("Brief received").first().json.body;
     const p = readJson($json.choices?.[0]?.message?.content);
     const fallbackTitle = ctx.brief.split(/[.!?]/)[0].split(/\s+/).slice(0, 6).join(" ");
+    const imagePrompt = p?.image_prompt || "Bright flat illustration of a school event in Cameroon: " + ctx.brief.slice(0, 200);
     return {
       json: {
         runId: ctx.runId,
-        imagePrompt: p?.image_prompt || "Bright flat illustration of a school event in Cameroon: " + ctx.brief.slice(0, 200),
+        media: req.media === "video" ? "video" : "image",
+        seconds: Number(req.videoSeconds) || 5,
+        imagePrompt,
+        videoPrompt: p?.video_prompt || "Slow cinematic camera move over this scene: " + imagePrompt,
         title: p?.title || fallbackTitle,
         date: p?.date || "",
         cost: $json.usage?.cost ?? 0,
@@ -187,15 +192,15 @@ function generateDrafts() {
   }, [1980, 1240], "runOnceForEachItem", [readJsonHelper]);
   w.ai("Paint image (OpenRouter)", {
     model: "$env.IMAGE_MODEL",
-    messages: "[{ role: 'user', content: 'Create a landscape 16:9 image. ' + $json.imagePrompt }]",
+    messages: "[{ role: 'user', content: 'Create a landscape 16:9 image. ' + $('Read image description').first().json.imagePrompt }]",
     json: false,
     extraBody: "modalities: ['image', 'text'], ",
   }, [2200, 1240]);
   w.if("Got an image?", "{{ !!$json.choices?.[0]?.message?.images?.[0]?.image_url?.url }}", [2420, 1240]);
-  w.app("Save image in app", "/api/internal/images", "{ runId: $('Read image description').item.json.runId, source: 'openrouter', dataUrl: $json.choices[0].message.images[0].image_url.url, prompt: $('Read image description').item.json.imagePrompt, title: $('Read image description').item.json.title, date: $('Read image description').item.json.date }", [2640, 1140], { timeout: 60000 });
+  w.app("Save image in app", "/api/internal/images", "{ runId: $('Read image description').first().json.runId, source: 'openrouter', dataUrl: $json.choices[0].message.images[0].image_url.url, prompt: $('Read image description').first().json.imagePrompt, title: $('Read image description').first().json.title, date: $('Read image description').first().json.date, aiCost: $json.usage?.cost ?? 0 }", [2640, 1140], { timeout: 300000 });
   w.http("Paint image (Pollinations)", {
     method: "GET",
-    url: "={{ $env.POLLINATIONS_URL.replace('{prompt}', encodeURIComponent($('Read image description').item.json.imagePrompt)) }}",
+    url: "={{ $env.POLLINATIONS_URL.replace('{prompt}', encodeURIComponent($('Read image description').first().json.imagePrompt)) }}",
     file: true,
     timeout: 90000,
     continueOnFail: true,
@@ -205,18 +210,22 @@ function generateDrafts() {
     url: "={{ $env.APP_INTERNAL_URL }}/api/internal/images",
     headers: [{ name: "x-postpilot-secret", value: "={{ $env.POSTPILOT_SECRET }}" }],
     query: [
-      { name: "runId", value: "={{ $('Read image description').item.json.runId }}" },
+      { name: "runId", value: "={{ $('Read image description').first().json.runId }}" },
       { name: "source", value: "pollinations" },
-      { name: "title", value: "={{ $('Read image description').item.json.title }}" },
-      { name: "date", value: "={{ $('Read image description').item.json.date }}" },
+      { name: "title", value: "={{ $('Read image description').first().json.title }}" },
+      { name: "date", value: "={{ $('Read image description').first().json.date }}" },
     ],
     binaryBody: true,
-    timeout: 60000,
+    timeout: 300000,
     continueOnFail: true,
   }, [3080, 1300]);
-  w.app("Use the template image", "/api/internal/images", "{ runId: $('Read image description').item.json.runId, source: 'template', title: $('Read image description').item.json.title, date: $('Read image description').item.json.date, note: 'OpenRouter image ' + (/429/.test(JSON.stringify($('Paint image (OpenRouter)').item.json)) ? 'busy (rate limit)' : 'failed') + ', Pollinations ' + (/429/.test(JSON.stringify($json)) ? 'busy (rate limit)' : 'failed') + ': template used' }", [3080, 1480]);
-  w.tellApp("Tell app: image ready", "$('Read image description').item.json.runId", "step: 'image', status: $json.source ? 'done' : 'failed', message: $json.source ? 'Image ready from ' + ({ openrouter: 'OpenRouter AI', pollinations: 'Pollinations.ai', template: 'the branded template' })[$json.source] : 'The image could not be saved', data: { title: $('Read image description').item.json.title }, cost: $('Read image description').item.json.cost + ($('Paint image (OpenRouter)').item.json.usage?.cost ?? 0)", [3300, 1240]);
-  w.chain("All drafts written", "Tell app: creating image", "Describe the image", "Read image description", "Paint image (OpenRouter)", "Got an image?");
+  w.app("Use the template image", "/api/internal/images", "{ runId: $('Read image description').first().json.runId, source: 'template', title: $('Read image description').first().json.title, date: $('Read image description').first().json.date, note: 'OpenRouter image ' + (/429/.test(JSON.stringify($('Paint image (OpenRouter)').first().json)) ? 'busy (rate limit)' : 'failed') + ', Pollinations ' + (/429/.test(JSON.stringify($json)) ? 'busy (rate limit)' : 'failed') + ': template used' }", [3080, 1480], { timeout: 300000 });
+  // The app answers every save with the timeline message and the AI cost it was given
+  w.tellApp("Tell app: image ready", "$('Read image description').first().json.runId", "step: 'image', status: $json.message ? 'done' : 'failed', message: $json.message || 'The picture could not be saved', data: { title: $('Read image description').first().json.title }, cost: $('Read image description').first().json.cost + Number($json.aiCost || 0)", [3300, 1240]);
+  w.if("Video post?", "{{ $json.media === 'video' }}", [2200, 1240 - 460]);
+  w.chain("All drafts written", "Tell app: creating image", "Describe the image", "Read image description", "Video post?");
+  w.connect("Video post?", "Paint image (OpenRouter)", 1);
+  w.chain("Paint image (OpenRouter)", "Got an image?");
   w.connect("Got an image?", "Save image in app", 0);
   w.connect("Got an image?", "Paint image (Pollinations)", 1);
   w.chain("Paint image (Pollinations)", "Got a Pollinations image?");
@@ -226,10 +235,12 @@ function generateDrafts() {
   w.chain("Save Pollinations image in app", "Tell app: image ready");
   w.chain("Use the template image", "Tell app: image ready");
 
+  addVideoBranch(w);
+
   w.note("### 4. Safety check\nA second AI reads all drafts against the brief and the school safety rules (student names, photos of minors, personal data, promises, wrong dates).\nIf the demo trap is on, we **hide** the warning about the planted mistake: the human must find it.", [3540, 1060], 1180, 520, 3);
-  w.tellApp("Tell app: checking safety", "$('Read image description').item.json.runId", "step: 'safety', status: 'running', message: 'Checking the drafts against the school safety rules'", [3600, 1240]);
+  w.tellApp("Tell app: checking safety", "$('Read image description').first().json.runId", "step: 'safety', status: 'running', message: 'Checking the drafts against the school safety rules'", [3600, 1240]);
   w.code("Prepare safety check", function () {
-    const ctx = $("All drafts written").item.json;
+    const ctx = $("All drafts written").first().json;
     const prompts = $("Load prompts").first().json.prompts;
     const drafts = ctx.drafts.map((d) => "### " + d.platform + "\n" + d.text).join("\n\n");
     return {
@@ -270,6 +281,116 @@ function generateDrafts() {
   w.tellApp("Tell app: safety done", "$json.runId", "step: 'safety', status: $json.ok ? 'done' : 'failed', message: $json.ok ? ($json.total ? $json.total + ' point(s) for you to check' : 'No safety problems found') : 'Safety check unavailable: please review carefully', data: { drafts: $json.drafts }, cost: $json.cost", [4480, 1240]);
   w.chain("Tell app: image ready", "Tell app: checking safety", "Prepare safety check", "Safety check with AI", "Read flags & hide the demo trap", "Tell app: safety done");
   return w;
+}
+
+// Video runs: OpenRouter films the scene (an async job we poll every 20 s).
+// Anything going wrong falls back to the image steps; the app then animates the image into a video.
+function addVideoBranch(w) {
+  const ctx = "$('Read image description').first().json";
+  const auth = { name: "Authorization", value: "=Bearer {{ $env.OPENROUTER_API_KEY }}" };
+  w.note("### 3b. Film a video (video runs only)\n1. **Start the video** sends the scene to the OpenRouter video model (`VIDEO_MODEL`).\n2. Video models take minutes, so we **wait 20 s and ask again** until it is ready (max 12 min).\n3. The video is downloaded and saved in the app, which converts it for Facebook and LinkedIn.\n4. If the model fails, we **paint an image instead** (section 3) and the app animates it.", [2140, 120], 2420, 860, 2);
+  w.tellApp("Tell app: filming", `${ctx}.runId`, `step: 'image', status: 'running', message: 'Filming a ' + ${ctx}.seconds + ' s video with ' + ($env.VIDEO_MODEL || 'x-ai/grok-imagine-video-1.5-lite') + '. This takes a minute or two'`, [2420, 520]);
+  w.http("Start the video (OpenRouter)", {
+    url: "https://openrouter.ai/api/v1/videos",
+    headers: [auth, { name: "X-Title", value: "PostPilot" }],
+    json: `{ model: $env.VIDEO_MODEL || 'x-ai/grok-imagine-video-1.5-lite', prompt: ${ctx}.videoPrompt, duration: ${ctx}.seconds, aspect_ratio: '16:9', resolution: $env.VIDEO_RESOLUTION || '480p' }`,
+    timeout: 60000,
+    continueOnFail: true,
+  }, [2640, 520]);
+  w.code("Read video job", function () {
+    const id = $json.id;
+    const err = $json.error;
+    // n8n reports HTTP errors as: 400 - "{\"error\":{\"message\":\"...\"}}"; keep only OpenRouter's message
+    const raw = typeof err === "string" ? err : err?.message ?? JSON.stringify(err ?? $json);
+    const inner = /message\\?":\s*\\?"([^"\\]+)/.exec(raw);
+    return {
+      json: {
+        jobId: id ?? null,
+        pollingUrl: $json.polling_url || (id ? "https://openrouter.ai/api/v1/videos/" + id : null),
+        ok: !!id,
+        error: id ? null : (inner ? inner[1] : raw).slice(0, 200),
+      },
+    };
+  }, [2860, 520]);
+  w.if("Video job started?", "{{ $json.ok }}", [3080, 520]);
+  w.add("Wait 20 s", "n8n-nodes-base.wait", 1.1, { amount: 20, unit: "seconds" }, [3300, 440], { webhookId: "9c3e4a55-7d0f-4b2a-c3e4-4d5e6f7a8b03" });
+  w.http("Check video status", {
+    method: "GET",
+    url: "={{ $('Read video job').first().json.pollingUrl }}",
+    headers: [auth],
+    continueOnFail: true,
+  }, [3520, 440]);
+  w.code("Read video status", function () {
+    // $runIndex counts how many times we already asked: 36 × 20 s = 12 minutes
+    const job = $("Read video job").first().json;
+    const attempt = $runIndex + 1;
+    const status = $json.status ?? "unknown";
+    const url = $json.unsigned_urls?.[0] ?? (status === "completed" ? "https://openrouter.ai/api/v1/videos/" + job.jobId + "/content?index=0" : null);
+    const failed = ["failed", "cancelled", "expired"].includes(status);
+    const tooLong = attempt >= 36;
+    const err = $json.error;
+    const waited = attempt * 20;
+    return {
+      json: {
+        ...job,
+        status,
+        done: status === "completed" && !!url,
+        stop: failed || tooLong,
+        url,
+        cost: $json.usage?.cost ?? 0,
+        error: failed ? (typeof err === "string" ? err : err?.message ?? "the video model failed") : tooLong ? "it took more than 12 minutes" : null,
+        message: "Filming… " + Math.floor(waited / 60) + " min " + String(waited % 60).padStart(2, "0") + " s so far (" + status.replace("_", " ") + ")",
+      },
+    };
+  }, [3740, 440]);
+  w.if("Video finished?", "{{ $json.done }}", [3960, 440]);
+  w.if("Keep waiting?", "{{ !$json.stop }}", [4180, 620]);
+  w.tellApp("Tell app: still filming", `${ctx}.runId`, "step: 'image', status: 'running', message: $json.message", [4400, 620]);
+  w.http("Download the video", {
+    method: "GET",
+    url: "={{ $json.url }}",
+    headers: [auth],
+    file: true,
+    timeout: 180000,
+    continueOnFail: true,
+  }, [4180, 300]);
+  w.if("Got the video file?", "{{ !!$binary.data }}", [4400, 300]);
+  w.http("Save video in app", {
+    url: "={{ $env.APP_INTERNAL_URL }}/api/internal/videos",
+    headers: [SECRET_HEADER],
+    query: [
+      { name: "runId", value: `={{ ${ctx}.runId }}` },
+      { name: "source", value: "openrouter" },
+      { name: "title", value: `={{ ${ctx}.title }}` },
+      { name: "date", value: `={{ ${ctx}.date }}` },
+      { name: "aiCost", value: "={{ $('Read video status').last().json.cost }}" },
+    ],
+    binaryBody: true,
+    timeout: 300000,
+    continueOnFail: true,
+  }, [4620, 220]);
+  w.code("Video failed: use an image", function () {
+    const err = $json.error;
+    const why = typeof err === "string" ? err : err?.message ?? (err ? JSON.stringify(err) : "no video file");
+    return { json: { message: "The video model did not deliver (" + String(why).slice(0, 140) + "). Animating an image instead" } };
+  }, [4620, 820]);
+  w.tellApp("Tell app: video failed", `${ctx}.runId`, "step: 'image', status: 'running', message: $json.message", [4840, 820]);
+
+  w.connect("Video post?", "Tell app: filming", 0);
+  w.chain("Tell app: filming", "Start the video (OpenRouter)", "Read video job", "Video job started?");
+  w.connect("Video job started?", "Wait 20 s", 0);
+  w.connect("Video job started?", "Video failed: use an image", 1);
+  w.chain("Wait 20 s", "Check video status", "Read video status", "Video finished?");
+  w.connect("Video finished?", "Download the video", 0);
+  w.connect("Video finished?", "Keep waiting?", 1);
+  w.connect("Keep waiting?", "Tell app: still filming", 0);
+  w.connect("Keep waiting?", "Video failed: use an image", 1);
+  w.chain("Tell app: still filming", "Wait 20 s");
+  w.chain("Download the video", "Got the video file?");
+  w.connect("Got the video file?", "Save video in app", 0);
+  w.connect("Got the video file?", "Video failed: use an image", 1);
+  w.chain("Save video in app", "Tell app: image ready");
+  w.chain("Video failed: use an image", "Tell app: video failed", "Paint image (OpenRouter)");
 }
 
 function redraft() {
@@ -356,7 +477,7 @@ function redraft() {
 
 function telegramApproval() {
   const w = new Workflow("ppTelegramApprov", "PostPilot – Telegram approval");
-  w.note("## PostPilot – Telegram approval\nSends the draft and its image to the demonstrator's phone with **Approve / Reject** buttons, then waits.\nThe decision goes back to the app. The app keeps the **first** decision (app or Telegram) and ignores the later one.\n\nNeeds: Telegram credential *PostPilot Telegram bot* and a public `WEBHOOK_URL` (same Wi-Fi IP or `scripts/tunnel.sh`) so the buttons can reach n8n.", [-80, -120], 700, 300, 4);
+  w.note("## PostPilot – Telegram approval\nSends the draft and its image (or video) to the demonstrator's phone with **Approve / Reject** buttons, then waits.\nThe decision goes back to the app. The app keeps the **first** decision (app or Telegram) and ignores the later one.\n\nNeeds: Telegram credential *PostPilot Telegram bot* and a public `WEBHOOK_URL` (same Wi-Fi IP or `scripts/tunnel.sh`) so the buttons can reach n8n.", [-80, -120], 700, 300, 4);
   w.webhook("Draft needs approval", "postpilot-approval", [0, 300]);
   w.secretCheck("Is this our app?", "Draft needs approval", [220, 300]);
   w.code("Write the Telegram message", function () {
@@ -365,10 +486,21 @@ function telegramApproval() {
     const flags = Array.isArray(d.flags) ? d.flags : [];
     const notes = flags.length ? "\n\n⚠️ Safety notes:\n" + flags.map((f) => "• " + f.explanation).join("\n") : "";
     const message = "📝 " + label + " draft v" + d.version + " for " + d.organisation + "\n\n" + d.text + notes;
-    return { json: { ...d, label, message: message.slice(0, 3900), caption: label + " post image (draft v" + d.version + ")" } };
+    // Older app versions only sent imagePath
+    const mediaPath = d.mediaPath ?? d.imagePath ?? null;
+    const isVideo = d.mediaType === "video";
+    return { json: { ...d, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + " post " + (isVideo ? "video" : "image") + " (draft v" + d.version + ")" } };
   }, [440, 300]);
-  w.if("Has an image?", "{{ !!$json.imagePath }}", [660, 300]);
-  w.http("Download image from app", { method: "GET", headers: [SECRET_HEADER], url: "={{ $env.APP_INTERNAL_URL }}{{ $json.imagePath }}", file: true, continueOnFail: true }, [880, 160]);
+  w.if("Has an image or video?", "{{ !!$json.mediaPath }}", [660, 300]);
+  w.http("Download media from app", { method: "GET", headers: [SECRET_HEADER], url: "={{ $env.APP_INTERNAL_URL }}{{ $json.mediaPath }}", file: true, timeout: 120000, continueOnFail: true }, [880, 160]);
+  w.if("Is it a video?", "{{ $('Write the Telegram message').item.json.isVideo }}", [1000, 0]);
+  w.add("Send video to Telegram", "n8n-nodes-base.telegram", 1.2, {
+    operation: "sendVideo",
+    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
+    binaryData: true,
+    binaryPropertyName: "data",
+    additionalFields: { caption: "={{ $('Write the Telegram message').item.json.caption }}" },
+  }, [1100, -100], { credentials: TELEGRAM, onError: "continueRegularOutput" });
   w.add("Send image to Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendPhoto",
     chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
@@ -405,10 +537,14 @@ function telegramApproval() {
     text: "={{ $json.accepted ? ($('Read the decision').item.json.decision === 'approve' ? '✅ Approved. PostPilot will take it from here.' : '↩️ Rejected. The agent is writing a new version.') : 'ℹ️ Too late: this draft was already decided in the app (' + $json.existing + ').' }}",
     additionalFields: { appendAttribution: false },
   }, [2200, 300], { credentials: TELEGRAM, onError: "continueRegularOutput" });
-  w.chain("Draft needs approval", "Is this our app?", "Write the Telegram message", "Has an image?");
-  w.connect("Has an image?", "Download image from app", 0);
-  w.connect("Has an image?", "Ask for approval on Telegram", 1);
-  w.chain("Download image from app", "Send image to Telegram", "Ask for approval on Telegram", "Read the decision", "Was a button pressed?");
+  w.chain("Draft needs approval", "Is this our app?", "Write the Telegram message", "Has an image or video?");
+  w.connect("Has an image or video?", "Download media from app", 0);
+  w.connect("Has an image or video?", "Ask for approval on Telegram", 1);
+  w.chain("Download media from app", "Is it a video?");
+  w.connect("Is it a video?", "Send video to Telegram", 0);
+  w.connect("Is it a video?", "Send image to Telegram", 1);
+  w.chain("Send video to Telegram", "Ask for approval on Telegram");
+  w.chain("Send image to Telegram", "Ask for approval on Telegram", "Read the decision", "Was a button pressed?");
   w.connect("Was a button pressed?", "Tell app the decision", 0);
   w.chain("Tell app the decision", "Confirm on Telegram");
   w.note("### Waiting for a human\n**Ask for approval on Telegram** pauses this execution until a button is pressed (max 2 hours). You can see it under *Executions* with the status *Waiting*.", [1240, 460], 600, 200, 6);
@@ -439,8 +575,21 @@ function publishPost() {
 
   w.if("Facebook?", `{{ ${req}.platform === 'facebook' }}`, [660, 640]);
   w.connect("Mock publishing?", "Facebook?", 1);
-  w.note("### Facebook Page\nDownload the image from the app, then send it with the text to `/{page-id}/photos`. For a later time we add `published=false` and `scheduled_publish_time`.", [820, 380], 920, 360, 5);
-  w.http("Download image for Facebook", { method: "GET", headers: [SECRET_HEADER], url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.imagePath }}`, file: true, continueOnFail: true }, [880, 560]);
+  w.note("### Facebook Page\nDownload the image (or video) from the app, then send it with the text to `/{page-id}/photos` (or `/{page-id}/videos`). For a later time we add `published=false` and `scheduled_publish_time`.", [820, 300], 1140, 440, 5);
+  w.if("Facebook video?", `{{ ${req}.mediaType === 'video' }}`, [880, 560]);
+  w.http("Download video for Facebook", { method: "GET", headers: [SECRET_HEADER], url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.mediaPath }}`, file: true, timeout: 120000, continueOnFail: true }, [1100, 420]);
+  w.http("Post video to Facebook Page", {
+    url: `=https://graph-video.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $env.FB_PAGE_ID }}/videos{{ ${req}.scheduledUnix ? '?published=false&scheduled_publish_time=' + ${req}.scheduledUnix : '' }}`,
+    form: [
+      { parameterType: "formBinaryData", name: "source", inputDataFieldName: "data" },
+      { name: "description", value: `={{ ${req}.text }}` },
+      { name: "title", value: `={{ ${req}.title || 'School event' }}` },
+      { name: "access_token", value: "={{ $env.FB_PAGE_TOKEN }}" },
+    ],
+    timeout: 300000,
+    continueOnFail: true,
+  }, [1320, 420]);
+  w.http("Download image for Facebook", { method: "GET", headers: [SECRET_HEADER], url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.imagePath }}`, file: true, continueOnFail: true }, [1100, 640]);
   w.http("Post photo to Facebook Page", {
     url: `=https://graph.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $env.FB_PAGE_ID }}/photos{{ ${req}.scheduledUnix ? '?published=false&unpublished_content_type=SCHEDULED&scheduled_publish_time=' + ${req}.scheduledUnix : '' }}`,
     form: [
@@ -450,7 +599,7 @@ function publishPost() {
     ],
     timeout: 60000,
     continueOnFail: true,
-  }, [1100, 560]);
+  }, [1320, 640]);
   w.code("Read Facebook answer", function () {
     const req = $("Post to publish").item.json.body;
     if ($json.error) {
@@ -458,15 +607,20 @@ function publishPost() {
       return { json: { postId: req.postId, status: "failed", error: "Facebook: " + (e.description || e.message || JSON.stringify(e)) } };
     }
     const id = $json.post_id || $json.id;
-    return { json: { postId: req.postId, status: req.scheduledAt ? "scheduled" : "published", externalId: id, url: "https://www.facebook.com/" + id } };
-  }, [1320, 560]);
-  w.app("Tell app: Facebook result", "/api/internal/posts/{{ $json.postId }}", "{ status: $json.status, externalId: $json.externalId, url: $json.url, error: $json.error }", [1540, 560]);
-  w.connect("Facebook?", "Download image for Facebook", 0);
+    const url = req.mediaType === "video" ? "https://www.facebook.com/watch/?v=" + id : "https://www.facebook.com/" + id;
+    return { json: { postId: req.postId, status: req.scheduledAt ? "scheduled" : "published", externalId: id, url } };
+  }, [1540, 560]);
+  w.app("Tell app: Facebook result", "/api/internal/posts/{{ $json.postId }}", "{ status: $json.status, externalId: $json.externalId, url: $json.url, error: $json.error }", [1760, 560]);
+  w.connect("Facebook?", "Facebook video?", 0);
+  w.connect("Facebook video?", "Download video for Facebook", 0);
+  w.connect("Facebook video?", "Download image for Facebook", 1);
+  w.chain("Download video for Facebook", "Post video to Facebook Page", "Read Facebook answer");
   w.chain("Download image for Facebook", "Post photo to Facebook Page", "Read Facebook answer", "Tell app: Facebook result");
 
   w.note("### LinkedIn\n1. Wait until the chosen time (if scheduled).\n2. Ask LinkedIn for an upload slot, upload the image.\n3. Create the post with the image.\nLinkedIn text uses a special format, so we escape symbols and turn #tags into LinkedIn hashtags.", [820, 780], 1820, 380, 6);
   w.if("Scheduled for later? (LinkedIn)", `{{ !!${req}.scheduledAt }}`, [880, 960]);
   w.add("Wait until the scheduled time", "n8n-nodes-base.wait", 1.1, { resume: "specificTime", dateTime: `={{ ${req}.scheduledAt }}` }, [1100, 880], { webhookId: "8b2d3f44-6c9e-4a1f-b2d3-3c4e5f6a7b02" });
+  w.if("LinkedIn video?", "{{ $json.isVideo }}", [1430, 1100]);
   w.code("Prepare LinkedIn text", function () {
     const req = $("Post to publish").item.json.body;
     // LinkedIn "little text" format: reserved symbols must be escaped, hashtags use a template
@@ -474,7 +628,7 @@ function publishPost() {
     let t = req.text.replace(/#([\p{L}\p{N}_]+)/gu, (m, tag) => { tags.push(tag); return "\u0000" + (tags.length - 1) + "\u0000"; });
     t = t.replace(/[\\|{}@\[\]()<>#*_~]/g, (c) => "\\" + c);
     t = t.replace(/\u0000(\d+)\u0000/g, (m, i) => "{hashtag|\\#|" + tags[Number(i)] + "}");
-    return { json: { postId: req.postId, commentary: t, imagePath: req.imagePath } };
+    return { json: { postId: req.postId, commentary: t, imagePath: req.imagePath, isVideo: req.mediaType === "video" } };
   }, [1320, 960]);
   const liHeaders = [
     { name: "Authorization", value: "=Bearer {{ $env.LINKEDIN_TOKEN }}" },
@@ -515,8 +669,110 @@ function publishPost() {
   w.connect("Facebook?", "Scheduled for later? (LinkedIn)", 1);
   w.connect("Scheduled for later? (LinkedIn)", "Wait until the scheduled time", 0);
   w.connect("Scheduled for later? (LinkedIn)", "Prepare LinkedIn text", 1);
-  w.chain("Wait until the scheduled time", "Prepare LinkedIn text", "Get a LinkedIn upload slot", "Download image for LinkedIn", "Upload image to LinkedIn", "Create LinkedIn post", "Read LinkedIn answer", "Tell app: LinkedIn result");
+  w.chain("Wait until the scheduled time", "Prepare LinkedIn text", "LinkedIn video?");
+  w.connect("LinkedIn video?", "Get a LinkedIn upload slot", 1);
+  w.chain("Get a LinkedIn upload slot", "Download image for LinkedIn", "Upload image to LinkedIn", "Create LinkedIn post", "Read LinkedIn answer", "Tell app: LinkedIn result");
+  addLinkedInVideo(w, liHeaders);
   return w;
+}
+
+// LinkedIn videos are uploaded in parts of about 4 MB: LinkedIn gives one upload address per part,
+// we download each byte range from the app and send it, then confirm with the list of part receipts (ETags).
+function addLinkedInVideo(w, liHeaders) {
+  const req = "$('Post to publish').first().json.body";
+  w.note("### LinkedIn video\n1. Ask for upload addresses (one per 4 MB part).\n2. Download each part from the app and upload it.\n3. Confirm the upload, then **wait until LinkedIn has processed the video** (checked every 15 s).\n4. Create the post with the video.", [1540, 1180], 2440, 560, 6);
+  w.http("Ask LinkedIn for a video upload", {
+    url: "https://api.linkedin.com/rest/videos?action=initializeUpload",
+    headers: liHeaders,
+    json: `{ initializeUploadRequest: { owner: $env.LINKEDIN_AUTHOR_URN, fileSizeBytes: ${req}.videoBytes, uploadCaptions: false, uploadThumbnail: false } }`,
+    continueOnFail: true,
+  }, [1600, 1360]);
+  w.code("Split the video into parts", function () {
+    const v = $input.first().json.value;
+    if (!v?.uploadInstructions?.length) return [{ json: { failed: true, error: $input.first().json.error ?? "LinkedIn did not give an upload address" } }];
+    return v.uploadInstructions.map((u) => ({
+      json: { uploadUrl: u.uploadUrl, range: "bytes=" + u.firstByte + "-" + u.lastByte, video: v.video, uploadToken: v.uploadToken ?? "" },
+    }));
+  }, [1820, 1360], "runOnceForAllItems");
+  w.if("Upload addresses received?", "{{ !$json.failed }}", [2040, 1360]);
+  w.http("Download a video part", {
+    method: "GET",
+    headers: [SECRET_HEADER, { name: "Range", value: "={{ $json.range }}" }],
+    url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.mediaPath }}`,
+    file: true,
+    timeout: 120000,
+    continueOnFail: true,
+  }, [2260, 1300]);
+  w.http("Upload the part to LinkedIn", {
+    method: "PUT",
+    url: "={{ $('Split the video into parts').item.json.uploadUrl }}",
+    headers: [{ name: "Content-Type", value: "application/octet-stream" }],
+    binaryBody: true,
+    fullResponse: true,
+    timeout: 180000,
+    continueOnFail: true,
+  }, [2480, 1300]);
+  w.code("Collect the part receipts", function () {
+    // LinkedIn needs the ETag of every part, in order
+    const first = $("Split the video into parts").first().json;
+    const results = $input.all().map((i) => i.json);
+    const bad = results.find((r) => r.error || !r.headers?.etag);
+    if (bad) return [{ json: { failed: true, error: bad.error ?? "LinkedIn did not confirm a video part" } }];
+    return [{ json: { video: first.video, uploadToken: first.uploadToken, etags: results.map((r) => r.headers.etag) } }];
+  }, [2700, 1300], "runOnceForAllItems");
+  w.if("All parts uploaded?", "{{ !$json.failed }}", [2920, 1300]);
+  w.http("Finish the LinkedIn upload", {
+    url: "https://api.linkedin.com/rest/videos?action=finalizeUpload",
+    headers: liHeaders,
+    json: "{ finalizeUploadRequest: { video: $json.video, uploadToken: $json.uploadToken, uploadedPartIds: $json.etags } }",
+    continueOnFail: true,
+  }, [3140, 1240]);
+  w.add("Wait 15 s for LinkedIn", "n8n-nodes-base.wait", 1.1, { amount: 15, unit: "seconds" }, [3360, 1240], { webhookId: "ad4f5b66-8e1a-4c3b-d4f5-5e6f7a8b9c04" });
+  w.http("Is the video processed?", {
+    method: "GET",
+    url: "=https://api.linkedin.com/rest/videos/{{ encodeURIComponent($('Collect the part receipts').first().json.video) }}",
+    headers: liHeaders,
+    continueOnFail: true,
+  }, [3580, 1240]);
+  w.code("Read processing status", function () {
+    // 40 × 15 s = 10 minutes at most
+    const finish = $("Finish the LinkedIn upload").first().json;
+    const status = $json.status ?? "UNKNOWN";
+    const ready = status === "AVAILABLE";
+    const failed = !!finish.error || status === "PROCESSING_FAILED" || $runIndex + 1 >= 40;
+    return { json: { status, ready, stop: ready || failed, error: ready ? null : finish.error ?? "LinkedIn could not process the video (" + status + ")" } };
+  }, [3800, 1240]);
+  w.if("Processing finished?", "{{ $json.stop }}", [4020, 1240]);
+  w.if("Video ready on LinkedIn?", "{{ $json.ready }}", [4240, 1160]);
+  w.http("Create LinkedIn video post", {
+    url: "https://api.linkedin.com/rest/posts",
+    headers: liHeaders,
+    json: `{ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: ${req}.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }`,
+    fullResponse: true,
+    continueOnFail: true,
+  }, [4460, 1080]);
+  w.code("Read LinkedIn video answer", function () {
+    const postId = $("Prepare LinkedIn text").first().json.postId;
+    // Arrives here from the post creation, or from a failed step with { error }
+    const err = $json.error;
+    if (err) return { json: { postId, status: "failed", error: "LinkedIn: " + (typeof err === "string" ? err : err.description || err.message || JSON.stringify(err)) } };
+    const urn = $json.headers?.["x-restli-id"] || $json.headers?.["x-linkedin-id"];
+    return { json: { postId, status: "published", externalId: urn, url: urn ? "https://www.linkedin.com/feed/update/" + urn + "/" : null } };
+  }, [4680, 1240]);
+
+  w.connect("LinkedIn video?", "Ask LinkedIn for a video upload", 0);
+  w.chain("Ask LinkedIn for a video upload", "Split the video into parts", "Upload addresses received?");
+  w.connect("Upload addresses received?", "Download a video part", 0);
+  w.connect("Upload addresses received?", "Read LinkedIn video answer", 1);
+  w.chain("Download a video part", "Upload the part to LinkedIn", "Collect the part receipts", "All parts uploaded?");
+  w.connect("All parts uploaded?", "Finish the LinkedIn upload", 0);
+  w.connect("All parts uploaded?", "Read LinkedIn video answer", 1);
+  w.chain("Finish the LinkedIn upload", "Wait 15 s for LinkedIn", "Is the video processed?", "Read processing status", "Processing finished?");
+  w.connect("Processing finished?", "Video ready on LinkedIn?", 0);
+  w.connect("Processing finished?", "Wait 15 s for LinkedIn", 1);
+  w.connect("Video ready on LinkedIn?", "Create LinkedIn video post", 0);
+  w.connect("Video ready on LinkedIn?", "Read LinkedIn video answer", 1);
+  w.chain("Create LinkedIn video post", "Read LinkedIn video answer", "Tell app: LinkedIn result");
 }
 
 function weeklyReport() {

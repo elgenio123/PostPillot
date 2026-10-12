@@ -95,7 +95,9 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
   const redrafting = run.events.filter((e) => e.step === `redraft_${platform}`).at(-1)?.status === "running";
   const draft = versions.find((d) => d.id === selected) ?? latest;
   const imageStep = run.events.filter((e) => e.step === "image").at(-1);
-  const image = run.image ? (platform === "facebook" ? run.image.facebook : run.image.linkedin) : null;
+  const isVideo = run.media === "video";
+  const image = run.image && !isVideo ? (platform === "facebook" ? run.image.facebook : run.image.linkedin) : null;
+  const video = isVideo && run.video ? { url: run.video.url, poster: run.video.poster } : null;
   const Preview = platform === "facebook" ? FacebookPreview : LinkedInPreview;
 
   if (!draft) {
@@ -137,12 +139,12 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
 
   return (
     <motion.div ref={cardRef} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className={cn("p-5 transition-shadow", draft.status === "approved" && "ring-2 ring-success/50")}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <Card className={cn("p-3 transition-shadow sm:p-5", draft.status === "approved" && "ring-2 ring-success/50")}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 sm:mb-4">
           <div className="flex items-center gap-3">
             <PlatformIcon platform={platform} className="size-10 text-lg" />
             <div>
-              <h3 className="text-xl font-bold">{PLATFORM_LABEL[platform]} post</h3>
+              <h3 className="text-lg font-bold sm:text-xl">{PLATFORM_LABEL[platform]} post</h3>
               <p className="text-sm text-muted-foreground">
                 {draft.source === "human_edit" ? "Edited by you" : draft.source === "redraft" ? "Rewritten by the agent" : "Written by the agent"}
               </p>
@@ -153,7 +155,7 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
               <TabsList>
                 {versions.map((v) => (
                   <TabsTrigger key={v.id} value={v.id} className="flex items-center gap-1.5">
-                    <span className={cn("size-2 rounded-full", v.status === "approved" ? "bg-success" : v.status === "rejected" ? "bg-danger" : v.status === "superseded" ? "bg-muted-foreground/40" : "bg-accent")} />
+                    <span className={cn("size-2 rounded-full", v.status === "approved" ? "bg-success" : v.status === "rejected" ? "bg-danger" : v.status === "superseded" ? "bg-muted-foreground/40" : "bg-primary")} />
                     v{v.version}
                   </TabsTrigger>
                 ))}
@@ -164,7 +166,7 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
 
         <AnimatePresence mode="wait">
           <motion.div key={draft.id} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.25 }}>
-            <Preview organisation={run.organisation} image={image} imageLoading={!image && imageStep?.status !== "done" && imageStep?.status !== "failed"}>
+            <Preview organisation={run.organisation} image={image} video={video} isVideo={isVideo} imageLoading={!image && !video && imageStep?.status !== "done" && imageStep?.status !== "failed"}>
               {editing ? (
                 <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="min-h-56 text-base" autoFocus />
               ) : (
@@ -207,12 +209,12 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
           </motion.div>
         </AnimatePresence>
 
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-5">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4 sm:mt-5 sm:gap-3 sm:pt-5">
           {draft.status === "pending" && isLatest && !editing && (
             <>
-              <Button variant="success" size="lg" onClick={() => decide("approve")}><ThumbsUp /> Approve</Button>
-              <Button variant="secondary" size="lg" onClick={() => { setEditText(draft.text); setEditing(true); }}><Pencil /> Edit</Button>
-              <Button variant="destructive" size="lg" onClick={() => setRejectOpen(true)}><ThumbsDown /> Reject</Button>
+              <Button variant="success" size="lg" className="max-sm:h-11 max-sm:flex-1 max-sm:px-3 max-sm:text-base" onClick={() => decide("approve")}><ThumbsUp /> Approve</Button>
+              <Button variant="secondary" size="lg" className="max-sm:h-11 max-sm:flex-1 max-sm:px-3 max-sm:text-base" onClick={() => { setEditText(draft.text); setEditing(true); }}><Pencil /> Edit</Button>
+              <Button variant="destructive" size="lg" className="max-sm:h-11 max-sm:flex-1 max-sm:px-3 max-sm:text-base" onClick={() => setRejectOpen(true)}><ThumbsDown /> Reject</Button>
             </>
           )}
           {editing && (
@@ -228,7 +230,7 @@ function DraftCard({ run, platform, onChanged }: { run: RunDetail; platform: "fa
           )}
           {draft.status === "superseded" && <Badge>Replaced by a newer version</Badge>}
           {redrafting && isLatest && (
-            <Badge tone="accent"><Loader2 className="animate-spin" /> The agent is writing a new version…</Badge>
+            <Badge tone="primary"><Loader2 className="animate-spin" /> The agent is writing a new version…</Badge>
           )}
           {!isLatest && <Button variant="ghost" onClick={() => setSelected(latest?.id)}>Go to latest version</Button>}
         </div>

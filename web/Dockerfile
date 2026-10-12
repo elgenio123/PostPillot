@@ -7,6 +7,10 @@ RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 6 && npm config set fetch-retry-maxtimeout 180000 && npm config set fetch-timeout 900000 && \
     (npm ci --no-audit --no-fund || npm install --no-audit --no-fund)
 
+# Test image (scripts/test.sh): dependencies plus the tools the video tests use
+FROM deps AS test
+RUN apk add --no-cache ffmpeg fontconfig ttf-dejavu
+
 FROM node:alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -16,8 +20,8 @@ RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:alpine
 WORKDIR /app
-# Fonts so the template image can draw text
-RUN apk add --no-cache fontconfig ttf-dejavu
+# Fonts so the template image can draw text; ffmpeg converts videos and animates images for video posts
+RUN apk add --no-cache fontconfig ttf-dejavu ffmpeg
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 \
     PROMPTS_DIR=/app/prompts CONFIG_DIR=/app/config DATA_DIR=/data
 COPY --from=build /app/.next/standalone ./

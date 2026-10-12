@@ -55,6 +55,9 @@ export function prompts(): Record<string, string> {
   return out;
 }
 
+// Same default as the Generate drafts workflow: the cheapest video model on OpenRouter that supports 5 to 10 s
+export const DEFAULT_VIDEO_MODEL = "x-ai/grok-imagine-video-1.5-lite";
+
 export const fcfaPerUsd = () => Number(process.env.FCFA_PER_USD ?? 600);
 export const n8nPublicUrl = () => (process.env.N8N_WEBHOOK_URL ?? "http://localhost:5678/").replace(/\/$/, "");
 export const appInternalUrl = () => process.env.APP_INTERNAL_URL ?? "http://web:3000";

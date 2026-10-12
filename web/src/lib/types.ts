@@ -43,6 +43,20 @@ export interface Post {
 
 export interface RunImage { source: "openrouter" | "pollinations" | "template"; original: string; facebook: string; linkedin: string; note: string | null }
 
+export type Media = "image" | "video";
+// "openrouter" is a real AI video; "animated-*" means the AI video failed and an image was animated instead
+export interface RunVideo { source: string; url: string; poster: string; seconds: number | null; note: string | null }
+
+// Lengths offered on the brief page; the video model must support them (see VIDEO_MODEL in .env)
+export const VIDEO_SOURCE_LABEL: Record<string, string> = {
+  openrouter: "AI video",
+  "animated-openrouter": "Animated AI image",
+  "animated-pollinations": "Animated Pollinations image",
+  "animated-template": "Animated template",
+};
+
+export const VIDEO_SECONDS = [5, 6, 8, 10] as const;
+
 export interface RunDetail {
   id: string;
   brief: string;
@@ -53,6 +67,8 @@ export interface RunDetail {
   mock: boolean;
   telegram: boolean;
   trap: boolean;
+  media: Media;
+  videoSeconds: number | null;
   status: string;
   title: string | null;
   error: string | null;
@@ -63,6 +79,7 @@ export interface RunDetail {
   drafts: Draft[];
   events: RunEvent[];
   image: RunImage | null;
+  video: RunVideo | null;
   posts: Post[];
 }
 
@@ -75,6 +92,7 @@ export interface AppConfig {
   n8nUrl: string;
   workflows: Record<string, string>;
   imageModel: string;
+  videoModel: string;
 }
 
 export interface Settings { model: string; mock: boolean; telegram: boolean; trap: boolean }
@@ -89,6 +107,9 @@ export const STEP_LABELS: Record<string, string> = {
   redraft_facebook: "Redrafting Facebook post",
   redraft_linkedin: "Redrafting LinkedIn post",
 };
+
+export const stepLabel = (step: string, media: Media = "image") =>
+  step === "image" && media === "video" ? "Creating video" : STEP_LABELS[step] ?? step;
 
 export function timelineSteps(platforms: string[]): string[] {
   return ["brief", ...platforms.map((p) => `draft_${p}`), "image", "safety", "approval"];

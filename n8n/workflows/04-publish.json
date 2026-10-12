@@ -251,9 +251,9 @@
     },
     {
       "parameters": {
-        "content": "### Facebook Page\nDownload the image from the app, then send it with the text to `/{page-id}/photos`. For a later time we add `published=false` and `scheduled_publish_time`.",
-        "width": 920,
-        "height": 360,
+        "content": "### Facebook Page\nDownload the image (or video) from the app, then send it with the text to `/{page-id}/photos` (or `/{page-id}/videos`). For a later time we add `published=false` and `scheduled_publish_time`.",
+        "width": 1140,
+        "height": 440,
         "color": 5
       },
       "id": "4911e9ce-b2f7-06f3-9463-49ab2c0b22df",
@@ -262,8 +262,117 @@
       "typeVersion": 1,
       "position": [
         820,
-        380
+        300
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a40a36e-009c-bf4a-42c2-85f8db773445",
+              "leftValue": "={{ $('Post to publish').item.json.body.mediaType === 'video' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "74bdfb82-9c87-e494-9db6-8d47a19fe72c",
+      "name": "Facebook video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $('Post to publish').item.json.body.mediaPath }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "73cc9bed-44ea-8e76-304f-a30c1c0be952",
+      "name": "Download video for Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph-video.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $env.FB_PAGE_ID }}/videos{{ $('Post to publish').item.json.body.scheduledUnix ? '?published=false&scheduled_publish_time=' + $('Post to publish').item.json.body.scheduledUnix : '' }}",
+        "options": {
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "description",
+              "value": "={{ $('Post to publish').item.json.body.text }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $('Post to publish').item.json.body.title || 'School event' }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.FB_PAGE_TOKEN }}"
+            }
+          ]
+        }
+      },
+      "id": "fe8c1621-f4ae-bcf7-49bf-3c6f3c5088aa",
+      "name": "Post video to Facebook Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        420
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -293,8 +402,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
-        560
+        1100,
+        640
       ],
       "onError": "continueRegularOutput"
     },
@@ -330,22 +439,22 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
-        560
+        1320,
+        640
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const req = $(\"Post to publish\").item.json.body;\nif ($json.error) {\n  const e = $json.error;\n  return { json: { postId: req.postId, status: \"failed\", error: \"Facebook: \" + (e.description || e.message || JSON.stringify(e)) } };\n}\nconst id = $json.post_id || $json.id;\nreturn { json: { postId: req.postId, status: req.scheduledAt ? \"scheduled\" : \"published\", externalId: id, url: \"https://www.facebook.com/\" + id } };"
+        "jsCode": "const req = $(\"Post to publish\").item.json.body;\nif ($json.error) {\n  const e = $json.error;\n  return { json: { postId: req.postId, status: \"failed\", error: \"Facebook: \" + (e.description || e.message || JSON.stringify(e)) } };\n}\nconst id = $json.post_id || $json.id;\nconst url = req.mediaType === \"video\" ? \"https://www.facebook.com/watch/?v=\" + id : \"https://www.facebook.com/\" + id;\nreturn { json: { postId: req.postId, status: req.scheduledAt ? \"scheduled\" : \"published\", externalId: id, url } };"
       },
       "id": "411416db-af38-c666-6f29-244383d31599",
       "name": "Read Facebook answer",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
+        1540,
         560
       ]
     },
@@ -374,7 +483,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
+        1760,
         560
       ],
       "onError": "continueRegularOutput"
@@ -447,8 +556,43 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e27caa32-51ca-81a0-5f7e-9f2bf7470f47",
+              "leftValue": "={{ $json.isVideo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "73bff8a8-c541-aded-8f5a-9f96f98c96f1",
+      "name": "LinkedIn video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1430,
+        1100
+      ]
+    },
+    {
+      "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const req = $(\"Post to publish\").item.json.body;\n// LinkedIn \"little text\" format: reserved symbols must be escaped, hashtags use a template\nconst tags = [];\nlet t = req.text.replace(/#([\\p{L}\\p{N}_]+)/gu, (m, tag) => { tags.push(tag); return \"\\u0000\" + (tags.length - 1) + \"\\u0000\"; });\nt = t.replace(/[\\\\|{}@\\[\\]()<>#*_~]/g, (c) => \"\\\\\" + c);\nt = t.replace(/\\u0000(\\d+)\\u0000/g, (m, i) => \"{hashtag|\\\\#|\" + tags[Number(i)] + \"}\");\nreturn { json: { postId: req.postId, commentary: t, imagePath: req.imagePath } };"
+        "jsCode": "const req = $(\"Post to publish\").item.json.body;\n// LinkedIn \"little text\" format: reserved symbols must be escaped, hashtags use a template\nconst tags = [];\nlet t = req.text.replace(/#([\\p{L}\\p{N}_]+)/gu, (m, tag) => { tags.push(tag); return \"\\u0000\" + (tags.length - 1) + \"\\u0000\"; });\nt = t.replace(/[\\\\|{}@\\[\\]()<>#*_~]/g, (c) => \"\\\\\" + c);\nt = t.replace(/\\u0000(\\d+)\\u0000/g, (m, i) => \"{hashtag|\\\\#|\" + tags[Number(i)] + \"}\");\nreturn { json: { postId: req.postId, commentary: t, imagePath: req.imagePath, isVideo: req.mediaType === \"video\" } };"
       },
       "id": "c435b8a3-f3b5-9650-531c-dad035f55e83",
       "name": "Prepare LinkedIn text",
@@ -646,6 +790,457 @@
         960
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### LinkedIn video\n1. Ask for upload addresses (one per 4 MB part).\n2. Download each part from the app and upload it.\n3. Confirm the upload, then **wait until LinkedIn has processed the video** (checked every 15 s).\n4. Create the post with the video.",
+        "width": 2440,
+        "height": 560,
+        "color": 6
+      },
+      "id": "ed9ba4aa-c24f-9e36-b712-1d4c8894765e",
+      "name": "Note 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/videos?action=initializeUpload",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ initializeUploadRequest: { owner: $env.LINKEDIN_AUTHOR_URN, fileSizeBytes: $('Post to publish').first().json.body.videoBytes, uploadCaptions: false, uploadThumbnail: false } }) }}"
+      },
+      "id": "8a4bdb14-b226-7160-6c4a-b7dc6fd6febb",
+      "name": "Ask LinkedIn for a video upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        1360
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $input.first().json.value;\nif (!v?.uploadInstructions?.length) return [{ json: { failed: true, error: $input.first().json.error ?? \"LinkedIn did not give an upload address\" } }];\nreturn v.uploadInstructions.map((u) => ({\n  json: { uploadUrl: u.uploadUrl, range: \"bytes=\" + u.firstByte + \"-\" + u.lastByte, video: v.video, uploadToken: v.uploadToken ?? \"\" },\n}));"
+      },
+      "id": "a92277e2-3d1d-3872-cfea-468577d5e011",
+      "name": "Split the video into parts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91c34cb8-b0b0-1c7b-d2b8-8abf61628e91",
+              "leftValue": "={{ !$json.failed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e1e49182-b91b-8cff-fbd8-fd73d1b7018c",
+      "name": "Upload addresses received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $('Post to publish').first().json.body.mediaPath }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            },
+            {
+              "name": "Range",
+              "value": "={{ $json.range }}"
+            }
+          ]
+        }
+      },
+      "id": "8fd9e5c0-a7a7-9c8c-1733-15f58cad3b32",
+      "name": "Download a video part",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2260,
+        1300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('Split the video into parts').item.json.uploadUrl }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/octet-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "9063bb1b-0d67-6704-6e7c-a86a0b21eff8",
+      "name": "Upload the part to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2480,
+        1300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// LinkedIn needs the ETag of every part, in order\nconst first = $(\"Split the video into parts\").first().json;\nconst results = $input.all().map((i) => i.json);\nconst bad = results.find((r) => r.error || !r.headers?.etag);\nif (bad) return [{ json: { failed: true, error: bad.error ?? \"LinkedIn did not confirm a video part\" } }];\nreturn [{ json: { video: first.video, uploadToken: first.uploadToken, etags: results.map((r) => r.headers.etag) } }];"
+      },
+      "id": "331d22c1-928b-e5bd-23be-36ddbaa391e0",
+      "name": "Collect the part receipts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "527b5ab4-c67d-995f-3daa-6244657cd995",
+              "leftValue": "={{ !$json.failed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "171ee403-222d-7e3a-a6a8-27bc3dce9b2e",
+      "name": "All parts uploaded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2920,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/videos?action=finalizeUpload",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ finalizeUploadRequest: { video: $json.video, uploadToken: $json.uploadToken, uploadedPartIds: $json.etags } }) }}"
+      },
+      "id": "70263ea3-fb61-0333-faf6-b75caf9668c3",
+      "name": "Finish the LinkedIn upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3140,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "b4b577a0-31d5-abe0-5c56-9e4b93145e60",
+      "name": "Wait 15 s for LinkedIn",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3360,
+        1240
+      ],
+      "webhookId": "ad4f5b66-8e1a-4c3b-d4f5-5e6f7a8b9c04"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.linkedin.com/rest/videos/{{ encodeURIComponent($('Collect the part receipts').first().json.video) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        }
+      },
+      "id": "45f8a9db-8890-2e60-0861-444855d8c6d4",
+      "name": "Is the video processed?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3580,
+        1240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 40 × 15 s = 10 minutes at most\nconst finish = $(\"Finish the LinkedIn upload\").first().json;\nconst status = $json.status ?? \"UNKNOWN\";\nconst ready = status === \"AVAILABLE\";\nconst failed = !!finish.error || status === \"PROCESSING_FAILED\" || $runIndex + 1 >= 40;\nreturn { json: { status, ready, stop: ready || failed, error: ready ? null : finish.error ?? \"LinkedIn could not process the video (\" + status + \")\" } };"
+      },
+      "id": "c06c42d1-4f6d-d9f7-6afc-65ecf4fe4324",
+      "name": "Read processing status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ef2188c9-64d5-0f77-0034-3cf3d0232009",
+              "leftValue": "={{ $json.stop }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c4ebc6a0-d3a4-ecdb-c9b4-a141943cd959",
+      "name": "Processing finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4020,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1b64469-1573-2f9b-ac06-336b8b91412f",
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "5679c3ca-1848-3fe2-5854-ae28c2d905da",
+      "name": "Video ready on LinkedIn?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4240,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/posts",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_TOKEN }}"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $env.LINKEDIN_API_VERSION }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: $('Post to publish').first().json.body.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
+      },
+      "id": "08c44ee6-abdf-72c7-af3c-4906433cd720",
+      "name": "Create LinkedIn video post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4460,
+        1080
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const postId = $(\"Prepare LinkedIn text\").first().json.postId;\n// Arrives here from the post creation, or from a failed step with { error }\nconst err = $json.error;\nif (err) return { json: { postId, status: \"failed\", error: \"LinkedIn: \" + (typeof err === \"string\" ? err : err.description || err.message || JSON.stringify(err)) } };\nconst urn = $json.headers?.[\"x-restli-id\"] || $json.headers?.[\"x-linkedin-id\"];\nreturn { json: { postId, status: \"published\", externalId: urn, url: urn ? \"https://www.linkedin.com/feed/update/\" + urn + \"/\" : null } };"
+      },
+      "id": "f55f0628-d7b2-b52e-f3ef-12cd596ccdef",
+      "name": "Read LinkedIn video answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        1240
+      ]
     }
   ],
   "connections": {
@@ -733,7 +1328,7 @@
       "main": [
         [
           {
-            "node": "Download image for Facebook",
+            "node": "Facebook video?",
             "type": "main",
             "index": 0
           }
@@ -741,6 +1336,46 @@
         [
           {
             "node": "Scheduled for later? (LinkedIn)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook video?": {
+      "main": [
+        [
+          {
+            "node": "Download video for Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download image for Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download video for Facebook": {
+      "main": [
+        [
+          {
+            "node": "Post video to Facebook Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post video to Facebook Page": {
+      "main": [
+        [
+          {
+            "node": "Read Facebook answer",
             "type": "main",
             "index": 0
           }
@@ -813,6 +1448,24 @@
       "main": [
         [
           {
+            "node": "LinkedIn video?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn video?": {
+      "main": [
+        [
+          {
+            "node": "Ask LinkedIn for a video upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Get a LinkedIn upload slot",
             "type": "main",
             "index": 0
@@ -865,6 +1518,199 @@
       ]
     },
     "Read LinkedIn answer": {
+      "main": [
+        [
+          {
+            "node": "Tell app: LinkedIn result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask LinkedIn for a video upload": {
+      "main": [
+        [
+          {
+            "node": "Split the video into parts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split the video into parts": {
+      "main": [
+        [
+          {
+            "node": "Upload addresses received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload addresses received?": {
+      "main": [
+        [
+          {
+            "node": "Download a video part",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read LinkedIn video answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download a video part": {
+      "main": [
+        [
+          {
+            "node": "Upload the part to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload the part to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Collect the part receipts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect the part receipts": {
+      "main": [
+        [
+          {
+            "node": "All parts uploaded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All parts uploaded?": {
+      "main": [
+        [
+          {
+            "node": "Finish the LinkedIn upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read LinkedIn video answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish the LinkedIn upload": {
+      "main": [
+        [
+          {
+            "node": "Wait 15 s for LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 15 s for LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Is the video processed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is the video processed?": {
+      "main": [
+        [
+          {
+            "node": "Read processing status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read processing status": {
+      "main": [
+        [
+          {
+            "node": "Processing finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processing finished?": {
+      "main": [
+        [
+          {
+            "node": "Video ready on LinkedIn?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 15 s for LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video ready on LinkedIn?": {
+      "main": [
+        [
+          {
+            "node": "Create LinkedIn video post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read LinkedIn video answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create LinkedIn video post": {
+      "main": [
+        [
+          {
+            "node": "Read LinkedIn video answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read LinkedIn video answer": {
       "main": [
         [
           {

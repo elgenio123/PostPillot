@@ -3,11 +3,11 @@ import { publish } from "./bus";
 import { callWebhook } from "./n8n";
 import { getSettings } from "./settings";
 import { WORKFLOWS, n8nPublicUrl, type Platform } from "./config";
-import { scheduleError, type Draft, type Post, type RunDetail, type SafetyFlag } from "./types";
+import { scheduleError, type Draft, type Media, type Post, type RunDetail, type SafetyFlag } from "./types";
 
 interface RunRow {
   id: string; brief: string; organisation: string; preset: string; platforms: string; model: string;
-  mock: number; telegram: number; trap: number; status: string; title: string | null;
+  mock: number; telegram: number; trap: number; media: Media; video_seconds: number | null; status: string; title: string | null;
   execution_id: string | null; error: string | null; created_at: string;
 }
 interface DraftRow {
@@ -66,23 +66,25 @@ async function setRunStatus(runId: string, status: string, error?: string) {
   publish({ type: "run", runId });
 }
 
-export interface NewRun { brief: string; organisation: string; preset: string; platforms: Platform[] }
+export interface NewRun { brief: string; organisation: string; preset: string; platforms: Platform[]; media?: Media; videoSeconds?: number }
 
 export async function createRun(input: NewRun): Promise<string> {
   const s = await getSettings();
   const id = newId();
   // The trap goes into one randomly chosen platform so the demonstrator has to read carefully
   const trapPlatform = s.trap ? input.platforms[Math.floor(Math.random() * input.platforms.length)] : null;
+  const media = input.media ?? "image";
+  const videoSeconds = media === "video" ? input.videoSeconds ?? 5 : null;
   await run(
-    `INSERT INTO runs (id, brief, organisation, preset, platforms, model, mock, telegram, trap, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'generating', ?)`,
+    `INSERT INTO runs (id, brief, organisation, preset, platforms, model, mock, telegram, trap, media, video_seconds, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generating', ?)`,
     id, input.brief, input.organisation, input.preset, JSON.stringify(input.platforms), s.model,
-    s.mock ? 1 : 0, s.telegram ? 1 : 0, s.trap ? 1 : 0, now(),
+    s.mock ? 1 : 0, s.telegram ? 1 : 0, s.trap ? 1 : 0, media, videoSeconds, now(),
   );
   try {
     await callWebhook("postpilot-generate", {
       runId: id, brief: input.brief, organisation: input.organisation, preset: input.preset,
-      platforms: input.platforms, model: s.model, trapPlatform,
+      platforms: input.platforms, model: s.model, trapPlatform, media, videoSeconds,
     });
   } catch (err) {
     await addEvent(id, "brief", "failed", (err as Error).message);
@@ -97,7 +99,7 @@ export async function listRuns() {
      FROM runs r ORDER BY r.created_at DESC LIMIT 50`,
   );
   return rows.map((r) => ({
-    id: r.id, title: r.title, organisation: r.organisation, status: r.status, model: r.model, mock: !!r.mock,
+    id: r.id, title: r.title, organisation: r.organisation, status: r.status, model: r.model, mock: !!r.mock, media: r.media,
     platforms: JSON.parse(r.platforms) as Platform[], createdAt: r.created_at, costUsd: Number(r.cost), brief: r.brief,
   }));
 }
@@ -105,12 +107,13 @@ export async function listRuns() {
 export async function getRunDetail(id: string): Promise<RunDetail | null> {
   const r = await getRun(id);
   if (!r) return null;
-  const [decisionRows, draftRows, img, cost, events, posts] = await Promise.all([
+  const [decisionRows, draftRows, img, vid, cost, events, posts] = await Promise.all([
     all<DecisionRow>("SELECT d.* FROM decisions d JOIN drafts x ON x.id = d.draft_id WHERE x.run_id = ?", id),
     all<DraftRow>("SELECT * FROM drafts WHERE run_id = ? ORDER BY platform, version", id),
     get<{ source: string; original: string; facebook: string; linkedin: string; note: string | null }>(
       "SELECT * FROM images WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", id,
     ),
+    latestVideo(id),
     get<{ total: number }>("SELECT COALESCE(SUM(usd), 0) AS total FROM costs WHERE run_id = ?", id),
     all<{ id: number; step: string; status: string; message: string | null; created_at: string }>(
       "SELECT * FROM events WHERE run_id = ? ORDER BY id", id,
@@ -121,7 +124,8 @@ export async function getRunDetail(id: string): Promise<RunDetail | null> {
   const base = n8nPublicUrl();
   return {
     id: r.id, brief: r.brief, organisation: r.organisation, preset: r.preset, platforms: JSON.parse(r.platforms),
-    model: r.model, mock: !!r.mock, telegram: !!r.telegram, trap: !!r.trap, status: r.status, title: r.title,
+    model: r.model, mock: !!r.mock, telegram: !!r.telegram, trap: !!r.trap, media: r.media, videoSeconds: r.video_seconds,
+    status: r.status, title: r.title,
     error: r.error, createdAt: r.created_at, costUsd: Number(cost?.total ?? 0),
     workflowUrl: `${base}/workflow/${WORKFLOWS.generate}`,
     executionUrl: r.execution_id ? `${base}/workflow/${WORKFLOWS.generate}/executions/${r.execution_id}` : null,
@@ -133,8 +137,25 @@ export async function getRunDetail(id: string): Promise<RunDetail | null> {
           original: `/api/images/${img.original}`, facebook: `/api/images/${img.facebook}`, linkedin: `/api/images/${img.linkedin}`,
         }
       : null,
+    video: vid
+      ? { source: vid.source, url: `/api/videos/${vid.file}`, poster: `/api/videos/${vid.poster}`, seconds: vid.seconds, note: vid.note }
+      : null,
     posts: posts.map(toPost),
   };
+}
+
+interface VideoRow { source: string; file: string; poster: string; seconds: number | null; bytes: number; note: string | null }
+const latestVideo = (runId: string) => get<VideoRow>("SELECT * FROM videos WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", runId);
+
+// What a post shows: the run's video for video runs, otherwise the image cropped for the platform
+async function postMedia(runId: string, media: Media, platform: string) {
+  if (media === "video") {
+    const v = await latestVideo(runId);
+    if (v) return { mediaType: "video" as const, mediaPath: `/api/videos/${v.file}`, videoBytes: v.bytes, imagePath: null };
+  }
+  const img = await get<{ facebook: string; linkedin: string }>("SELECT * FROM images WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", runId);
+  const imagePath = img ? `/api/images/${platform === "facebook" ? img.facebook : img.linkedin}` : null;
+  return { mediaType: imagePath ? ("image" as const) : null, mediaPath: imagePath, videoBytes: null, imagePath };
 }
 
 function latestDraft(runId: string, platform: string) {
@@ -239,11 +260,10 @@ async function sendToTelegram(runId: string, onlyPlatform?: string) {
   if (!detail) return;
   for (const d of detail.drafts) {
     if (d.status !== "pending" || (onlyPlatform && d.platform !== onlyPlatform)) continue;
-    const img = detail.image ? (d.platform === "facebook" ? detail.image.facebook : detail.image.linkedin) : null;
     try {
       await callWebhook("postpilot-approval", {
         runId, draftId: d.id, platform: d.platform, version: d.version, text: d.text,
-        organisation: detail.organisation, imagePath: img, flags: d.safetyFlags,
+        organisation: detail.organisation, flags: d.safetyFlags, ...(await postMedia(runId, detail.media, d.platform)),
       });
     } catch (err) {
       await addEvent(runId, "approval", "failed", `Telegram not reached: ${(err as Error).message}`);
@@ -331,7 +351,7 @@ export async function publishDraft(draftId: string, when: string): Promise<Post>
     if (err) throw new UserError(err);
     scheduledAt = date.toISOString();
   }
-  const img = await get<{ facebook: string; linkedin: string }>("SELECT * FROM images WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", d.run_id);
+  const media = await postMedia(d.run_id, r.media, d.platform);
   const id = newId();
   await run(
     `INSERT INTO posts (id, draft_id, run_id, platform, status, scheduled_at, mock, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -339,9 +359,8 @@ export async function publishDraft(draftId: string, when: string): Promise<Post>
   );
   try {
     await callWebhook("postpilot-publish", {
-      postId: id, runId: d.run_id, platform: d.platform, text: d.text, organisation: r.organisation,
-      imagePath: img ? `/api/images/${d.platform === "facebook" ? img.facebook : img.linkedin}` : null,
-      mock, scheduledAt,
+      postId: id, runId: d.run_id, platform: d.platform, text: d.text, organisation: r.organisation, title: r.title,
+      ...media, mock, scheduledAt,
       scheduledUnix: scheduledAt ? Math.floor(new Date(scheduledAt).getTime() / 1000) : null,
     });
   } catch (err) {

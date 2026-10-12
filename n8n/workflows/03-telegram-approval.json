@@ -4,7 +4,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## PostPilot – Telegram approval\nSends the draft and its image to the demonstrator's phone with **Approve / Reject** buttons, then waits.\nThe decision goes back to the app. The app keeps the **first** decision (app or Telegram) and ignores the later one.\n\nNeeds: Telegram credential *PostPilot Telegram bot* and a public `WEBHOOK_URL` (same Wi-Fi IP or `scripts/tunnel.sh`) so the buttons can reach n8n.",
+        "content": "## PostPilot – Telegram approval\nSends the draft and its image (or video) to the demonstrator's phone with **Approve / Reject** buttons, then waits.\nThe decision goes back to the app. The app keeps the **first** decision (app or Telegram) and ignores the later one.\n\nNeeds: Telegram credential *PostPilot Telegram bot* and a public `WEBHOOK_URL` (same Wi-Fi IP or `scripts/tunnel.sh`) so the buttons can reach n8n.",
         "width": 700,
         "height": 300,
         "color": 4
@@ -72,7 +72,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const d = $(\"Draft needs approval\").item.json.body;\nconst label = d.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\";\nconst flags = Array.isArray(d.flags) ? d.flags : [];\nconst notes = flags.length ? \"\\n\\n⚠️ Safety notes:\\n\" + flags.map((f) => \"• \" + f.explanation).join(\"\\n\") : \"\";\nconst message = \"📝 \" + label + \" draft v\" + d.version + \" for \" + d.organisation + \"\\n\\n\" + d.text + notes;\nreturn { json: { ...d, label, message: message.slice(0, 3900), caption: label + \" post image (draft v\" + d.version + \")\" } };"
+        "jsCode": "const d = $(\"Draft needs approval\").item.json.body;\nconst label = d.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\";\nconst flags = Array.isArray(d.flags) ? d.flags : [];\nconst notes = flags.length ? \"\\n\\n⚠️ Safety notes:\\n\" + flags.map((f) => \"• \" + f.explanation).join(\"\\n\") : \"\";\nconst message = \"📝 \" + label + \" draft v\" + d.version + \" for \" + d.organisation + \"\\n\\n\" + d.text + notes;\n// Older app versions only sent imagePath\nconst mediaPath = d.mediaPath ?? d.imagePath ?? null;\nconst isVideo = d.mediaType === \"video\";\nreturn { json: { ...d, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + \" post \" + (isVideo ? \"video\" : \"image\") + \" (draft v\" + d.version + \")\" } };"
       },
       "id": "a710e530-2846-88cd-032f-7e6e39ab339c",
       "name": "Write the Telegram message",
@@ -94,8 +94,8 @@
           },
           "conditions": [
             {
-              "id": "f2c02646-b901-514a-251e-c556941be108",
-              "leftValue": "={{ !!$json.imagePath }}",
+              "id": "39b2fd38-2be5-272c-a43d-6aa5e5e716df",
+              "leftValue": "={{ !!$json.mediaPath }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -109,8 +109,8 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "34eb1364-ced3-9489-9b92-6f33972ecdec",
-      "name": "Has an image?",
+      "id": "80b45f40-36e6-d576-d519-18e3ccf2dc1e",
+      "name": "Has an image or video?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
@@ -121,9 +121,9 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.APP_INTERNAL_URL }}{{ $json.imagePath }}",
+        "url": "={{ $env.APP_INTERNAL_URL }}{{ $json.mediaPath }}",
         "options": {
-          "timeout": 30000,
+          "timeout": 120000,
           "response": {
             "response": {
               "responseFormat": "file",
@@ -141,14 +141,75 @@
           ]
         }
       },
-      "id": "59d0a4ba-4936-0325-a26a-6845cd60312b",
-      "name": "Download image from app",
+      "id": "4e60c0d9-4b9d-a44a-68be-ad2bfff0fc98",
+      "name": "Download media from app",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         880,
         160
       ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "01373589-788d-fd50-1a80-9b26782d6a08",
+              "leftValue": "={{ $('Write the Telegram message').item.json.isVideo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c66abfda-6c11-f1df-2086-e686190abd86",
+      "name": "Is it a video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendVideo",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "={{ $('Write the Telegram message').item.json.caption }}"
+        }
+      },
+      "id": "7b498039-d82d-c995-efec-f17b712e6ef7",
+      "name": "Send video to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        -100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ppTelegramCred01",
+          "name": "PostPilot Telegram bot"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
@@ -364,18 +425,18 @@
       "main": [
         [
           {
-            "node": "Has an image?",
+            "node": "Has an image or video?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Has an image?": {
+    "Has an image or video?": {
       "main": [
         [
           {
-            "node": "Download image from app",
+            "node": "Download media from app",
             "type": "main",
             "index": 0
           }
@@ -389,11 +450,40 @@
         ]
       ]
     },
-    "Download image from app": {
+    "Download media from app": {
       "main": [
         [
           {
+            "node": "Is it a video?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it a video?": {
+      "main": [
+        [
+          {
+            "node": "Send video to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Send image to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send video to Telegram": {
+      "main": [
+        [
+          {
+            "node": "Ask for approval on Telegram",
             "type": "main",
             "index": 0
           }

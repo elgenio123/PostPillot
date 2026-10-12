@@ -145,7 +145,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       <MotionConfig reducedMotion="user">
         <TooltipProvider>
           {children}
-          <Toaster position="bottom-right" richColors theme={theme} toastOptions={{ style: { fontSize: "0.95rem", padding: "12px 14px", borderRadius: 14 } }} />
+          <Toaster position="bottom-right" mobileOffset={{ bottom: 76 }} richColors theme={theme} toastOptions={{ style: { fontSize: "0.95rem", padding: "12px 14px", borderRadius: 14 } }} />
         </TooltipProvider>
       </MotionConfig>
     </AppCtx.Provider>

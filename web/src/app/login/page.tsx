@@ -64,7 +64,7 @@ export default function LoginPage() {
     <div className="grid min-h-[calc(100vh-4rem)] place-items-center">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <Logo className="size-16 rounded-3xl [&_svg]:size-9" />
+          <Logo className="size-16 animate-float rounded-3xl [&_svg]:size-9" />
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight">Welcome to PostPilot</h1>
           <p className="mt-1 text-muted-foreground">AI drafts. You decide. Sign in to continue.</p>
         </div>
