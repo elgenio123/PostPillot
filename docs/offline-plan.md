@@ -46,7 +46,7 @@ Script (2–3 minutes, follow [demo-script.md](demo-script.md)):
 
 1. Set the browser to 1920×1080, full screen, light theme, zoom 125%.
 2. Header: **Real** publishing, **Telegram: On**, **Demo trap: On**.
-3. Load the science fair example → **Run agent**. Let the full timeline play.
+3. Load the "AIMS Cameroon: public lecture on AI" example → **Run agent**. Let the full timeline play.
 4. Review: reject the trapped draft with a reason, show v2, approve one post in the app.
 5. Approve the other post **on the phone** (record the phone screen too, or film it with a second phone).
 6. Publish Facebook **now**. Click **View post** to show it live on the real Page.

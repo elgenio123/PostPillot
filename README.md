@@ -69,7 +69,7 @@ docker-compose.yml        local stack: PostgreSQL + web + n8n (+ optional Cloudf
 deploy/                   server stack (Caddy HTTPS), bootstrap script, prod .env template
 .github/workflows/        CI/CD pipeline
 .env.example              every setting, explained
-config/                   models.json (model picker), examples.json (3 example briefs)
+config/                   models.json (model picker), examples.json (6 example briefs)
 prompts/                  every AI prompt as an editable Markdown file, plus brand voice presets
 n8n/workflows/            the 5 workflows (imported automatically)
 n8n/entrypoint.sh         imports and activates the workflows, creates the Telegram credential and the owner

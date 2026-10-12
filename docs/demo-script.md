@@ -19,7 +19,7 @@
 
 ### 0:20 – The brief (40 s)
 
-On the **Brief** page, click **Load example → Science fair in Yaoundé**.
+On the **Brief** page, click **Load example → AIMS Cameroon: public lecture on AI**.
 
 > "This is all I give it: one paragraph, the school's name, and the voice: formal, student club or sports team."
 
