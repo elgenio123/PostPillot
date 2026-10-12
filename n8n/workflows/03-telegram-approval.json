@@ -130,6 +130,15 @@
               "outputPropertyName": "data"
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
         }
       },
       "id": "59d0a4ba-4936-0325-a26a-6845cd60312b",

@@ -74,7 +74,7 @@ prompts/                  every AI prompt as an editable Markdown file, plus bra
 n8n/workflows/            the 5 workflows (imported automatically)
 n8n/entrypoint.sh         imports and activates the workflows, creates the Telegram credential and the owner
 web/                      Next.js app (UI, API, login)
-scripts/                  tunnel.sh, test.sh, smoke.sh, build-workflows.mjs
+scripts/                  deploy.sh, tunnel.sh, test.sh, smoke.sh, build-workflows.mjs
 docs/                     setup guides, n8n beginner guide, demo script
 ```
 
@@ -82,7 +82,7 @@ You can change the prompts in `prompts/` at any time. They are read on every run
 
 ## Documentation
 
-- [docs/deployment.md](docs/deployment.md): deploy to AWS EC2 (or any Ubuntu server) with GitHub Actions (build, test, deploy, smoke test).
+- [docs/deployment.md](docs/deployment.md): deploy to AWS EC2 (or any Ubuntu server) from your PC with `./scripts/deploy.sh`, or with GitHub Actions.
 - [docs/accounts-setup.md](docs/accounts-setup.md): OpenRouter, Telegram, Facebook and LinkedIn step by step. **Start several days before the event.**
 - [docs/n8n-beginner-guide.md](docs/n8n-beginner-guide.md): learn n8n through the PostPilot workflows.
 - [docs/demo-script.md](docs/demo-script.md): the 5-minute demo, what to say and when.

@@ -1,0 +1,14 @@
+# Copy to deploy/deploy.conf (git-ignored) and fill in. Read by scripts/deploy.sh.
+
+# Server address (AWS Elastic IP) and SSH user
+SSH_HOST=13.38.120.7
+SSH_USER=ubuntu
+# Private key used to log in (the one imported into AWS as key pair "postpilot")
+SSH_KEY=~/.ssh/postpilot_aws
+
+# The server's .env: copy deploy/prod.env.example to deploy/prod.env (git-ignored) and fill it in
+PROD_ENV_FILE=deploy/prod.env
+
+# Smoke test login (same as ADMIN_EMAIL / ADMIN_PASSWORD in prod.env; update it after changing the password in the app)
+SMOKE_EMAIL=
+SMOKE_PASSWORD=

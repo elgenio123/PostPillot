@@ -15,6 +15,34 @@ Until the server secrets exist, the last three stages are skipped and the pipeli
 
 On the server, only **Caddy** is exposed. It serves the app on 80/443 and n8n on 5678, and gets free HTTPS certificates when you set a domain. PostgreSQL holds both the app database (`postpilot`) and n8n's (`n8n`). Uploaded images live in a Docker volume.
 
+## Option A (recommended): deploy from your PC
+
+`scripts/deploy.sh` runs the same stages as the pipeline from your own computer. **The server builds the images itself**: your PC only uploads the source code (~1 MB), and the server downloads the dependencies on AWS's fast network. This works well on a slow connection.
+
+One-time setup, after creating the server (section 1):
+
+```bash
+cp deploy/deploy.conf.example deploy/deploy.conf   # server IP, SSH user, key path
+cp deploy/prod.env.example deploy/prod.env         # the server's .env: API keys, passwords, APP_DOMAIN
+# edit both files (they are git-ignored, so your keys never reach GitHub)
+```
+
+Every deployment:
+
+```bash
+./scripts/deploy.sh                # setup → test → bootstrap (if needed) → deploy → smoke test
+./scripts/deploy.sh --skip-tests   # faster, when you just ran the tests
+./scripts/deploy.sh --full-smoke   # also run the whole agent story after deploying
+```
+
+The first deployment takes 10–20 minutes: Docker is installed and both images are built. Later ones take a few minutes. To change a key (Telegram, Facebook…), edit `deploy/prod.env` and run the script again.
+
+With this option you don't need any GitHub secrets: skip sections 3 to 5. GitHub Actions still runs build and tests on each push, but never deploys without the SSH secrets.
+
+## Option B: deploy with GitHub Actions
+
+Described in sections 3 to 5 below.
+
 ## 1. Create the server on AWS
 
 Everything below is in the AWS console (https://console.aws.amazon.com). Expected cost: about **US$17–20 per month** for a `t4g.small`, so **$100 of credits lasts about 5 months**.

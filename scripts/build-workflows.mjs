@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Workflow } from "./lib/n8n-builder.mjs";
+import { Workflow, SECRET_HEADER } from "./lib/n8n-builder.mjs";
 
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "n8n", "workflows");
 const TELEGRAM = { telegramApi: { id: "ppTelegramCred01", name: "PostPilot Telegram bot" } };
@@ -368,7 +368,7 @@ function telegramApproval() {
     return { json: { ...d, label, message: message.slice(0, 3900), caption: label + " post image (draft v" + d.version + ")" } };
   }, [440, 300]);
   w.if("Has an image?", "{{ !!$json.imagePath }}", [660, 300]);
-  w.http("Download image from app", { method: "GET", url: "={{ $env.APP_INTERNAL_URL }}{{ $json.imagePath }}", file: true, continueOnFail: true }, [880, 160]);
+  w.http("Download image from app", { method: "GET", headers: [SECRET_HEADER], url: "={{ $env.APP_INTERNAL_URL }}{{ $json.imagePath }}", file: true, continueOnFail: true }, [880, 160]);
   w.add("Send image to Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendPhoto",
     chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
@@ -440,7 +440,7 @@ function publishPost() {
   w.if("Facebook?", `{{ ${req}.platform === 'facebook' }}`, [660, 640]);
   w.connect("Mock publishing?", "Facebook?", 1);
   w.note("### Facebook Page\nDownload the image from the app, then send it with the text to `/{page-id}/photos`. For a later time we add `published=false` and `scheduled_publish_time`.", [820, 380], 920, 360, 5);
-  w.http("Download image for Facebook", { method: "GET", url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.imagePath }}`, file: true, continueOnFail: true }, [880, 560]);
+  w.http("Download image for Facebook", { method: "GET", headers: [SECRET_HEADER], url: `={{ $env.APP_INTERNAL_URL }}{{ ${req}.imagePath }}`, file: true, continueOnFail: true }, [880, 560]);
   w.http("Post photo to Facebook Page", {
     url: `=https://graph.facebook.com/{{ $env.FB_GRAPH_VERSION || 'v23.0' }}/{{ $env.FB_PAGE_ID }}/photos{{ ${req}.scheduledUnix ? '?published=false&unpublished_content_type=SCHEDULED&scheduled_publish_time=' + ${req}.scheduledUnix : '' }}`,
     form: [
@@ -487,7 +487,7 @@ function publishPost() {
     json: "{ initializeUploadRequest: { owner: $env.LINKEDIN_AUTHOR_URN } }",
     continueOnFail: true,
   }, [1540, 960]);
-  w.http("Download image for LinkedIn", { method: "GET", url: "={{ $env.APP_INTERNAL_URL }}{{ $('Prepare LinkedIn text').item.json.imagePath }}", file: true, continueOnFail: true }, [1760, 960]);
+  w.http("Download image for LinkedIn", { method: "GET", headers: [SECRET_HEADER], url: "={{ $env.APP_INTERNAL_URL }}{{ $('Prepare LinkedIn text').item.json.imagePath }}", file: true, continueOnFail: true }, [1760, 960]);
   w.http("Upload image to LinkedIn", {
     method: "PUT",
     url: "={{ $('Get a LinkedIn upload slot').item.json.value?.uploadUrl }}",
@@ -598,6 +598,15 @@ function weeklyReport() {
   return w;
 }
 
+// Every call to the app must carry the shared secret: the app refuses requests without a session or the secret
+function checkAppCallsAreSigned(wf) {
+  for (const n of wf.nodes) {
+    if (n.type !== "n8n-nodes-base.httpRequest" || !String(n.parameters.url).includes("APP_INTERNAL_URL")) continue;
+    const headers = n.parameters.headerParameters?.parameters ?? [];
+    if (!headers.some((h) => h.name === "x-postpilot-secret")) throw new Error(`${wf.name} → "${n.name}" calls the app without the x-postpilot-secret header`);
+  }
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 const files = {
   "01-generate-drafts.json": generateDrafts(),
@@ -607,6 +616,7 @@ const files = {
   "05-weekly-report.json": weeklyReport(),
 };
 for (const [file, wf] of Object.entries(files)) {
+  checkAppCallsAreSigned(wf);
   fs.writeFileSync(path.join(OUT, file), JSON.stringify(wf.toJSON(), null, 2) + "\n");
   console.log(`${file}: ${wf.nodes.filter((n) => !n.type.endsWith("stickyNote")).length} nodes`);
 }

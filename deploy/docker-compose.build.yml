@@ -1,0 +1,11 @@
+# Used by scripts/deploy.sh (deploy from your PC): the server builds the images from the uploaded source,
+# natively for its own CPU, instead of pulling them from a registry.
+services:
+  web:
+    build:
+      context: ./src
+      dockerfile: web/Dockerfile
+  n8n:
+    build:
+      context: ./src
+      dockerfile: n8n/Dockerfile

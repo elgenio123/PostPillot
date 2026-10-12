@@ -4,3 +4,5 @@ node_modules/
 web/data/
 *.log
 deploy/.env
+deploy/deploy.conf
+deploy/prod.env

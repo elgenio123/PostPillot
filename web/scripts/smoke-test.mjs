@@ -108,7 +108,12 @@ try {
 
     const config = await call("/api/config");
     await call("/api/settings");
-    const n8n = await call("/api/health/n8n");
+    // Webhooks register a few seconds after n8n starts, so retry for up to 3 minutes
+    let n8n = { ok: false, message: "" };
+    for (let i = 0; i < 36 && !n8n.ok; i++) {
+      n8n = await call("/api/health/n8n");
+      if (!n8n.ok) await new Promise((r) => setTimeout(r, 5000));
+    }
     if (!n8n.ok) throw new Error(`n8n: ${n8n.message}`);
     log("n8n is running and the workflows are active");
     const home = await fetch(`${APP}/`, { headers: { cookie } });

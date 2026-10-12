@@ -52,7 +52,7 @@ function LoginForm() {
         </div>
       </div>
       {error && <p role="alert" className="rounded-2xl bg-danger-soft p-3 font-semibold text-danger">{error}</p>}
-      <Button type="submit" variant="accent" size="lg" loading={busy} className="w-full">
+      <Button type="submit" variant="brand" size="lg" loading={busy} className="w-full">
         {!busy && <LogIn />} Sign in
       </Button>
     </form>

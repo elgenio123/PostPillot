@@ -277,6 +277,15 @@
               "outputPropertyName": "data"
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
         }
       },
       "id": "fbc60f10-8c97-4b54-7c87-9adeadb4f75f",
@@ -500,6 +509,15 @@
               "outputPropertyName": "data"
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-postpilot-secret",
+              "value": "={{ $env.POSTPILOT_SECRET }}"
+            }
+          ]
         }
       },
       "id": "726d5f8d-c8b9-5258-1968-b91f2530204e",
