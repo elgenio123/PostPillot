@@ -82,7 +82,7 @@ You can change the prompts in `prompts/` at any time. They are read on every run
 
 ## Documentation
 
-- [docs/deployment.md](docs/deployment.md): deploy to Oracle Cloud or Azure with GitHub Actions (build, test, deploy, smoke test).
+- [docs/deployment.md](docs/deployment.md): deploy to AWS EC2 (or any Ubuntu server) with GitHub Actions (build, test, deploy, smoke test).
 - [docs/accounts-setup.md](docs/accounts-setup.md): OpenRouter, Telegram, Facebook and LinkedIn step by step. **Start several days before the event.**
 - [docs/n8n-beginner-guide.md](docs/n8n-beginner-guide.md): learn n8n through the PostPilot workflows.
 - [docs/demo-script.md](docs/demo-script.md): the 5-minute demo, what to say and when.

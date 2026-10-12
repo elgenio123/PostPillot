@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prepares a fresh Ubuntu/Debian server (Oracle Cloud or Azure) for PostPilot. Safe to run again.
+# Prepares a fresh Ubuntu/Debian server (AWS EC2, or any Ubuntu VM) for PostPilot. Safe to run again.
 # Usage: sudo sh bootstrap.sh <deploy-user>
 # Installs Docker, adds swap on small machines, opens ports 80/443/5678 and creates /opt/postpilot.
 set -eu
@@ -21,7 +21,7 @@ fi
 systemctl enable --now docker
 usermod -aG docker "$DEPLOY_USER"
 
-# n8n + PostgreSQL + the app need about 1.5 GB; small VMs (Azure B1s: 1 GB) get a 2 GB swap file
+# n8n + PostgreSQL + the app need about 1.5 GB; small VMs (e.g. t4g.small, 2 GB) get a 2 GB swap file
 mem_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 if [ "$mem_mb" -lt 3000 ] && ! swapon --show | grep -q .; then
   say "Adding a 2 GB swap file (RAM: ${mem_mb} MB)"
@@ -32,7 +32,7 @@ if [ "$mem_mb" -lt 3000 ] && ! swapon --show | grep -q .; then
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
-# Oracle Cloud Ubuntu images block ports with iptables rules, in addition to the cloud firewall
+# Some cloud images (e.g. Oracle) also block ports with iptables; on AWS the security group is the firewall
 for port in 80 443 5678; do
   if command -v iptables >/dev/null 2>&1 && ! iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null; then
     iptables -I INPUT 5 -p tcp -m state --state NEW --dport "$port" -j ACCEPT 2>/dev/null \

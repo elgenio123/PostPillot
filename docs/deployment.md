@@ -1,11 +1,11 @@
 # Deploying PostPilot to a cloud server
 
-PostPilot deploys with **GitHub Actions** to one Linux VM on a free tier (Oracle Cloud or Azure). Every push to `main` runs:
+PostPilot deploys with **GitHub Actions** to one Ubuntu server on **AWS EC2** (any Ubuntu VM works). Every push to `main` runs:
 
 | Stage | What it does | Runs on |
 |---|---|---|
 | **Setup** | Image names, checks the workflow JSON and Compose files, decides whether to deploy | every push and PR |
-| **Build** | Builds the `postpilot-web` and `postpilot-n8n` images for **amd64 + arm64** and pushes them to GitHub Container Registry (ghcr.io) | every push (PRs: build only) |
+| **Build** | Builds the `postpilot-web` and `postpilot-n8n` images (ARM for AWS Graviton by default) and pushes them to GitHub Container Registry (ghcr.io) | every push (PRs: build only) |
 | **Test** | Type check + 28 API tests against a real PostgreSQL | every push and PR |
 | **Bootstrap** | Installs Docker, swap and firewall rules, **only on a fresh server**. If the server is ready, it does nothing | `main`, when secrets exist |
 | **Deploy** | Copies the Compose file, Caddyfile and `.env`, pulls the new images, restarts | `main`, when secrets exist |
@@ -15,49 +15,89 @@ Until the server secrets exist, the last three stages are skipped and the pipeli
 
 On the server, only **Caddy** is exposed. It serves the app on 80/443 and n8n on 5678, and gets free HTTPS certificates when you set a domain. PostgreSQL holds both the app database (`postpilot`) and n8n's (`n8n`). Uploaded images live in a Docker volume.
 
-## 1. Create the server
+## 1. Create the server on AWS
 
-Use an **Ubuntu 24.04 or 22.04** image. The bootstrap script supports Ubuntu/Debian only.
+Everything below is in the AWS console (https://console.aws.amazon.com). Expected cost: about **US$17–20 per month** for a `t4g.small`, so **$100 of credits lasts about 5 months**.
 
-### Option A: Oracle Cloud Always Free (recommended: up to 4 ARM CPUs and 24 GB RAM, free forever)
+### 1.1 Protect your credits first (5 min)
 
-1. Sign up at https://cloud.oracle.com (a card is needed for verification; Always Free resources are not charged).
-2. *Compute → Instances → Create instance*:
-   - Image: **Canonical Ubuntu 24.04**.
-   - Shape: **Ampere → VM.Standard.A1.Flex**, 2 OCPU / 12 GB is plenty. If Oracle says "out of capacity", try another availability domain or try later.
-   - Networking: keep "Assign a public IPv4 address".
-   - SSH keys: upload your **personal** public key (for your own access).
-3. Open the ports. Go to the instance → *Subnet* → *Security List* → *Add Ingress Rules*, with source `0.0.0.0/0`, TCP, destination ports **80, 443, 5678**.
-   (Ubuntu on Oracle also blocks ports with iptables. The bootstrap stage fixes that.)
-4. Hostname for HTTPS: Oracle gives no free domain name. Use **sslip.io**, which needs no account: if the IP is `141.147.10.20`, your domain is `141-147-10-20.sslip.io`. Let's Encrypt works with it.
-5. SSH user: `ubuntu`.
+1. Top right → your name → **Billing and Cost Management → Budgets → Create budget**.
+2. Choose the **Monthly cost budget** template, amount **$25**, your email → *Create budget*. AWS emails you before you spend more than planned.
+3. *Billing → Free tier / Credits*: note when your credits and free plan end. A **free plan** account is closed after 6 months unless you upgrade to a paid plan, so upgrade before then if the server must stay up.
 
-### Option B: Azure free account (12 months free B1s, x86)
+### 1.2 Pick the region
 
-1. Sign up at https://azure.microsoft.com/free.
-2. *Virtual machines → Create*:
-   - Image: **Ubuntu Server 24.04 LTS**. Size: **B1s** (free 12 months; 1 GB RAM, so the bootstrap adds 2 GB swap. B2s is smoother if you have credit).
-   - Authentication: SSH public key, username e.g. `azureuser`.
-   - Inbound ports: allow **SSH (22), HTTP (80), HTTPS (443)**.
-3. After creation: VM → *Networking* → *Add inbound port rule* → TCP **5678** (n8n, for Telegram buttons and the editor).
-4. Free domain name: VM → *Public IP address* → *Configuration* → **DNS name label** (e.g. `postpilot-demo`) → Save. Your domain is `postpilot-demo.<region>.cloudapp.azure.com`. Also set the IP *Assignment* to **Static**.
-5. SSH user: the username you chose.
+Top right, region selector: **Europe (Paris) eu-west-3**. It's close to Cameroon and has Graviton instances. Create everything below in this same region.
 
-## 2. Give GitHub access to the server
+### 1.3 Create the SSH key (one key for you and for GitHub)
 
-Create a key pair **only for deployments** on your PC:
+On your PC:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/postpilot_deploy -C "github-actions-postpilot" -N ""
+ssh-keygen -t ed25519 -f ~/.ssh/postpilot_aws -C "postpilot-deploy" -N ""
+cat ~/.ssh/postpilot_aws.pub
 ```
 
-Add the public key to the server:
+In AWS: **EC2 → Key pairs → Actions → Import key pair**. Name it `postpilot`, paste the content of `postpilot_aws.pub`, then *Import*.
+
+### 1.4 Create the firewall (security group)
+
+**EC2 → Security groups → Create security group**:
+
+- Name: `postpilot-sg`. VPC: the default one.
+- **Inbound rules** (*Add rule* for each, source **Anywhere-IPv4 0.0.0.0/0**):
+
+| Type | Port | Why |
+|---|---|---|
+| SSH | 22 | GitHub Actions deploys over SSH. Its addresses change, so it must be open; only the key can log in |
+| HTTP | 80 | Web app, and HTTPS certificate checks |
+| HTTPS | 443 | Web app over HTTPS |
+| Custom TCP | 5678 | n8n editor and Telegram buttons |
+
+- Outbound: leave "All traffic". → *Create security group*.
+
+### 1.5 Launch the server
+
+**EC2 → Instances → Launch instances**:
+
+| Field | Value |
+|---|---|
+| Name | `postpilot` |
+| Image (AMI) | **Ubuntu Server 24.04 LTS**, architecture **64-bit (Arm)** |
+| Instance type | **t4g.small** (2 vCPU, 2 GB; the bootstrap adds 2 GB swap). `t4g.medium` (4 GB) is smoother but costs twice as much |
+| Key pair | `postpilot` |
+| Network settings → Edit | *Select existing security group* → `postpilot-sg`. Auto-assign public IP: Enable |
+| Storage | **20 GiB gp3** |
+
+→ *Launch instance*.
+
+> If you pick an Intel/AMD type instead (`t3.small`, `m7i-flex.large`…), set the GitHub variable `IMAGE_PLATFORMS` to `linux/amd64` (step 4).
+
+### 1.6 Give it a fixed address (Elastic IP)
+
+**EC2 → Elastic IPs → Allocate Elastic IP address → Allocate**, then select it → **Actions → Associate Elastic IP address** → instance `postpilot` → *Associate*.
+
+Write down the IP, e.g. `13.38.120.7`. Without an Elastic IP, the address changes when the instance stops.
+
+### 1.7 Your free HTTPS domain
+
+AWS's `ec2-…amazonaws.com` names can't get a Let's Encrypt certificate. Use **sslip.io** instead (no account needed): replace the dots of your Elastic IP with dashes.
+
+`13.38.120.7` → **`13-38-120-7.sslip.io`**
+
+This is your `APP_DOMAIN`. The app will be at `https://13-38-120-7.sslip.io` and n8n at `https://13-38-120-7.sslip.io:5678`.
+
+### 1.8 Check the connection
 
 ```bash
-ssh ubuntu@<server-ip> "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys" < ~/.ssh/postpilot_deploy.pub
+ssh -i ~/.ssh/postpilot_aws ubuntu@13.38.120.7
 ```
 
-The SSH user needs passwordless `sudo`. That is the default for `ubuntu` on Oracle and for the admin user on Azure.
+Answer `yes` to the fingerprint question, then `exit`. You don't need to install anything: the **Bootstrap** stage installs Docker and swap on the first deployment.
+
+## 2. Other providers
+
+Any Ubuntu 22.04/24.04 VM works the same way: open ports 22, 80, 443 and 5678, use a hostname for HTTPS (sslip.io works everywhere), and set `IMAGE_PLATFORMS` to match the CPU.
 
 ## 3. Push the code to GitHub
 
@@ -77,9 +117,9 @@ GitHub → your repository → *Settings → Secrets and variables → Actions*.
 
 | Name | Value |
 |---|---|
-| `SSH_HOST` | server public IP, e.g. `141.147.10.20` |
-| `SSH_USER` | `ubuntu` (Oracle) or your Azure username |
-| `SSH_PRIVATE_KEY` | the whole content of `~/.ssh/postpilot_deploy` (the private key, including the BEGIN/END lines) |
+| `SSH_HOST` | the Elastic IP, e.g. `13.38.120.7` |
+| `SSH_USER` | `ubuntu` |
+| `SSH_PRIVATE_KEY` | the whole content of `~/.ssh/postpilot_aws` (the private key, including the BEGIN/END lines) |
 | `PROD_ENV` | the server `.env`: copy [`deploy/prod.env.example`](../deploy/prod.env.example), fill it in, and paste the whole text |
 | `SMOKE_EMAIL` | the app login used by the smoke test (same as `ADMIN_EMAIL`) |
 | `SMOKE_PASSWORD` | its password. **Update this secret whenever you change that password in the app** |
@@ -88,7 +128,8 @@ GitHub → your repository → *Settings → Secrets and variables → Actions*.
 
 | Name | Value |
 |---|---|
-| `APP_URL` | `https://<your domain>` (or `http://<ip>` without a domain) |
+| `APP_URL` | `https://13-38-120-7.sslip.io` (your `APP_DOMAIN` with https://) |
+| `IMAGE_PLATFORMS` | optional: only if your instance is not ARM, e.g. `linux/amd64` |
 
 Optional: *Settings → Environments → production → Required reviewers* makes every deployment wait for your approval.
 
@@ -108,7 +149,7 @@ The first HTTPS request can take ~30 s while Caddy gets the certificate.
 ## Operating the server
 
 ```bash
-ssh ubuntu@<server-ip>
+ssh -i ~/.ssh/postpilot_aws ubuntu@<elastic-ip>
 cd /opt/postpilot
 docker compose ps                      # status
 docker compose logs -f web n8n         # logs
