@@ -87,6 +87,14 @@ PostPilot posts on **your personal LinkedIn profile** using the free *Share on L
    and run `docker compose up -d` again.
 8. `LINKEDIN_API_VERSION` must be a recent month (format `YYYYMM`, less than one year old). If posting fails with a version error, set it to the current or previous month.
 
+9. `LINKEDIN_VISIBILITY` sets who can see the posts: `PUBLIC` (anyone) or `CONNECTIONS` (only your 1st-degree connections). Keep `CONNECTIONS` while testing, then switch to `PUBLIC` for the real event. Restart n8n after changing it.
+
+Testing without showing test posts to anyone:
+- LinkedIn has no "only me" visibility. `CONNECTIONS` is the most private option the API offers.
+- Safest: create a separate test LinkedIn account with no connections, and generate the token while signed in with it. Its posts are then seen by nobody.
+- Otherwise, delete each test post right after checking it: open the post link from the run page, then *⋯ → Delete*.
+- Use Mock mode for rehearsals, and Real mode only for one final check.
+
 Notes:
 - LinkedIn has no simple free scheduling, so scheduled LinkedIn posts wait inside n8n (a **Wait** node) and post at the chosen time. Keep the laptop and Docker running until then.
 - LinkedIn statistics need a partner API, so the dashboard shows "not available" for LinkedIn. This is expected.

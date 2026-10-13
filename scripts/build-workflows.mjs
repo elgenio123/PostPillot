@@ -653,7 +653,7 @@ function publishPost() {
   w.http("Create LinkedIn post", {
     url: "https://api.linkedin.com/rest/posts",
     headers: liHeaders,
-    json: "{ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').item.json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Get a LinkedIn upload slot').item.json.value?.image, altText: 'Event illustration' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }",
+    json: "{ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').item.json.commentary, visibility: $env.LINKEDIN_VISIBILITY || 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Get a LinkedIn upload slot').item.json.value?.image, altText: 'Event illustration' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }",
     fullResponse: true,
     continueOnFail: true,
   }, [2200, 960]);
@@ -747,7 +747,7 @@ function addLinkedInVideo(w, liHeaders) {
   w.http("Create LinkedIn video post", {
     url: "https://api.linkedin.com/rest/posts",
     headers: liHeaders,
-    json: `{ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: ${req}.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }`,
+    json: `{ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: $env.LINKEDIN_VISIBILITY || 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: ${req}.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }`,
     fullResponse: true,
     continueOnFail: true,
   }, [4460, 1080]);

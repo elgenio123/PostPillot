@@ -735,7 +735,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').item.json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Get a LinkedIn upload slot').item.json.value?.image, altText: 'Event illustration' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
+        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').item.json.commentary, visibility: $env.LINKEDIN_VISIBILITY || 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Get a LinkedIn upload slot').item.json.value?.image, altText: 'Event illustration' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
       },
       "id": "5b07699d-2e58-f9bd-cdfc-bf37c22f4642",
       "name": "Create LinkedIn post",
@@ -1216,7 +1216,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: $('Post to publish').first().json.body.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
+        "jsonBody": "={{ JSON.stringify({ author: $env.LINKEDIN_AUTHOR_URN, commentary: $('Prepare LinkedIn text').first().json.commentary, visibility: $env.LINKEDIN_VISIBILITY || 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { id: $('Collect the part receipts').first().json.video, title: $('Post to publish').first().json.body.title || 'School event' } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}"
       },
       "id": "08c44ee6-abdf-72c7-af3c-4906433cd720",
       "name": "Create LinkedIn video post",
