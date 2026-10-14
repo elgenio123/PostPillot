@@ -2,7 +2,7 @@ import { all, get, newId, now, run, tx } from "./db";
 import { publish } from "./bus";
 import { callWebhook } from "./n8n";
 import { getSettings } from "./settings";
-import { WORKFLOWS, n8nPublicUrl, type Platform } from "./config";
+import { WORKFLOWS, n8nPublicUrl, telegramChatIds, type Platform } from "./config";
 import { scheduleError, type Draft, type Media, type Post, type RunDetail, type SafetyFlag } from "./types";
 
 interface RunRow {
@@ -260,13 +260,17 @@ async function sendToTelegram(runId: string, onlyPlatform?: string) {
   if (!detail) return;
   for (const d of detail.drafts) {
     if (d.status !== "pending" || (onlyPlatform && d.platform !== onlyPlatform)) continue;
-    try {
-      await callWebhook("postpilot-approval", {
-        runId, draftId: d.id, platform: d.platform, version: d.version, text: d.text,
-        organisation: detail.organisation, flags: d.safetyFlags, ...(await postMedia(runId, detail.media, d.platform)),
-      });
-    } catch (err) {
-      await addEvent(runId, "approval", "failed", `Telegram not reached: ${(err as Error).message}`);
+    const media = await postMedia(runId, detail.media, d.platform);
+    // One waiting execution per person: whoever presses a button first decides
+    for (const chatId of telegramChatIds()) {
+      try {
+        await callWebhook("postpilot-approval", {
+          runId, draftId: d.id, platform: d.platform, version: d.version, text: d.text,
+          organisation: detail.organisation, flags: d.safetyFlags, chatId, ...media,
+        });
+      } catch (err) {
+        await addEvent(runId, "approval", "failed", `Telegram not reached (${chatId}): ${(err as Error).message}`);
+      }
     }
   }
 }

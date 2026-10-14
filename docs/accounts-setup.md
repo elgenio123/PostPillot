@@ -30,6 +30,7 @@ The model list in the header comes from `config/models.json`. Model names change
 3. Open your new bot and press **Start** (or send `/start`). A bot cannot write to you before you write to it.
 4. Get your **chat ID**: open **@userinfobot** and press Start. It replies with your numeric ID. Put it in `.env` as `TELEGRAM_CHAT_ID`.
    - ⚠️ Do **not** use the number at the start of the bot token: that is the bot's own ID, and a bot cannot message itself.
+   - **Several people:** list their IDs separated by commas, e.g. `TELEGRAM_CHAT_ID=123456789,987654321`. Each person must open the bot and press **Start** first. Everyone gets the drafts with Approve / Reject buttons and the weekly report. The first person to press a button decides; the others get *Too late* if they press afterwards. **Settings → Telegram → Test** sends a test message to each ID.
    - To send drafts to a **group** instead (several reviewers), add the bot to the group, send a message there, and use the group's ID (a negative number, see `getUpdates` below).
    - Alternative: open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser after messaging your bot and read `"chat":{"id": ...}`.
 5. Run `docker compose up -d`. The n8n container creates the credential *PostPilot Telegram bot* from the token.

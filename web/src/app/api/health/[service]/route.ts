@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { n8nHealthy } from "@/lib/n8n";
+import { telegramChatIds } from "@/lib/config";
 import type { Ctx } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -38,22 +39,27 @@ const checks: Record<string, (send: boolean) => Promise<Check>> = {
     const r = await getJson(`https://api.telegram.org/bot${env("TELEGRAM_BOT_TOKEN")}/getMe`);
     if (!r.ok) return { ok: false, message: "Telegram refused the bot token" };
     const bot = r.body.result?.username;
+    const ids = telegramChatIds();
     // A common mistake: the number before ":" in the token is the bot's own ID, not yours
-    if (env("TELEGRAM_CHAT_ID") === env("TELEGRAM_BOT_TOKEN").split(":")[0]) {
-      return { ok: false, message: `TELEGRAM_CHAT_ID is the bot's own ID. Use YOUR ID from @userinfobot, after pressing Start in @${bot}` };
+    if (ids.includes(env("TELEGRAM_BOT_TOKEN").split(":")[0])) {
+      return { ok: false, message: `TELEGRAM_CHAT_ID contains the bot's own ID. Use each person's ID from @userinfobot, after they press Start in @${bot}` };
     }
-    if (!send) return { ok: true, message: `Bot @${bot} is ready. Click Test to send yourself a test message.` };
-    // Sends a real test message, so "connected" means the phone actually receives it
-    const sent = await getJson(`https://api.telegram.org/bot${env("TELEGRAM_BOT_TOKEN")}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: env("TELEGRAM_CHAT_ID"), text: "✅ PostPilot test: Telegram approval is connected." }),
-    });
-    if (!sent.ok) {
-      const why = sent.body.description ?? `error ${sent.status}`;
-      return { ok: false, message: `@${bot} cannot write to chat ${env("TELEGRAM_CHAT_ID")}: ${why}. Open @${bot} and press Start, and check the chat ID.` };
+    const who = ids.length > 1 ? `${ids.length} people` : "you";
+    if (!send) return { ok: true, message: `Bot @${bot} is ready for ${who}. Click Test to send a test message.` };
+    // Sends a real test message to each person, so "connected" means every phone actually receives it
+    const failed: string[] = [];
+    for (const chatId of ids) {
+      const sent = await getJson(`https://api.telegram.org/bot${env("TELEGRAM_BOT_TOKEN")}/sendMessage`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: "✅ PostPilot test: Telegram approval is connected." }),
+      });
+      if (!sent.ok) failed.push(`${chatId} (${sent.body.description ?? `error ${sent.status}`})`);
     }
-    return { ok: true, message: `Test message sent by @${bot}. Check your phone.` };
+    if (failed.length) {
+      return { ok: false, message: `@${bot} cannot write to ${failed.join(", ")}. Each person must open @${bot} and press Start; also check the IDs.` };
+    }
+    return { ok: true, message: `Test message sent by @${bot} to ${who}. Check the phone${ids.length > 1 ? "s" : ""}.` };
   },
   async facebook() {
     if (!env("FB_PAGE_ID") || !env("FB_PAGE_TOKEN")) return { ok: false, configured: false, message: "Add FB_PAGE_ID and FB_PAGE_TOKEN to .env for Real publishing (not needed in Mock mode)" };

@@ -72,7 +72,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const d = $(\"Draft needs approval\").item.json.body;\nconst label = d.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\";\nconst flags = Array.isArray(d.flags) ? d.flags : [];\nconst notes = flags.length ? \"\\n\\n⚠️ Safety notes:\\n\" + flags.map((f) => \"• \" + f.explanation).join(\"\\n\") : \"\";\nconst message = \"📝 \" + label + \" draft v\" + d.version + \" for \" + d.organisation + \"\\n\\n\" + d.text + notes;\n// Older app versions only sent imagePath\nconst mediaPath = d.mediaPath ?? d.imagePath ?? null;\nconst isVideo = d.mediaType === \"video\";\nreturn { json: { ...d, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + \" post \" + (isVideo ? \"video\" : \"image\") + \" (draft v\" + d.version + \")\" } };"
+        "jsCode": "const d = $(\"Draft needs approval\").item.json.body;\nconst label = d.platform === \"facebook\" ? \"Facebook\" : \"LinkedIn\";\nconst flags = Array.isArray(d.flags) ? d.flags : [];\nconst notes = flags.length ? \"\\n\\n⚠️ Safety notes:\\n\" + flags.map((f) => \"• \" + f.explanation).join(\"\\n\") : \"\";\nconst message = \"📝 \" + label + \" draft v\" + d.version + \" for \" + d.organisation + \"\\n\\n\" + d.text + notes;\n// Older app versions only sent imagePath\nconst mediaPath = d.mediaPath ?? d.imagePath ?? null;\nconst isVideo = d.mediaType === \"video\";\n// The app sends one request per person; older app versions sent none, so use the first ID\nconst chatId = String(d.chatId ?? $env.TELEGRAM_CHAT_ID ?? \"\").split(\",\")[0].trim();\nreturn { json: { ...d, chatId, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + \" post \" + (isVideo ? \"video\" : \"image\") + \" (draft v\" + d.version + \")\" } };"
       },
       "id": "a710e530-2846-88cd-032f-7e6e39ab339c",
       "name": "Write the Telegram message",
@@ -189,7 +189,7 @@
     {
       "parameters": {
         "operation": "sendVideo",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "chatId": "={{ $('Write the Telegram message').item.json.chatId }}",
         "binaryData": true,
         "binaryPropertyName": "data",
         "additionalFields": {
@@ -215,7 +215,7 @@
     {
       "parameters": {
         "operation": "sendPhoto",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "chatId": "={{ $('Write the Telegram message').item.json.chatId }}",
         "binaryData": true,
         "binaryPropertyName": "data",
         "additionalFields": {
@@ -241,7 +241,7 @@
     {
       "parameters": {
         "operation": "sendAndWait",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "chatId": "={{ $('Write the Telegram message').item.json.chatId }}",
         "message": "={{ $('Write the Telegram message').item.json.message }}",
         "approvalOptions": {
           "values": {
@@ -359,7 +359,7 @@
     {
       "parameters": {
         "operation": "sendMessage",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "chatId": "={{ $('Write the Telegram message').item.json.chatId }}",
         "text": "={{ $json.accepted ? ($('Read the decision').item.json.decision === 'approve' ? '✅ Approved. PostPilot will take it from here.' : '↩️ Rejected. The agent is writing a new version.') : 'ℹ️ Too late: this draft was already decided in the app (' + $json.existing + ').' }}",
         "additionalFields": {
           "appendAttribution": false

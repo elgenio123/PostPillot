@@ -31,7 +31,7 @@ A technical overview for developers and AI engineers: what each n8n workflow doe
 |---|---|---|---|
 | `postpilot-generate` | Generate drafts (`ppGenerateDrafts`) | `createRun()` | `runId, brief, organisation, preset, platforms, model, trapPlatform, media, videoSeconds` |
 | `postpilot-redraft` | Redraft (`ppRedraftPost001`) | `decide()` on reject | `draftId, platform, previousText, reason, brief, model…` |
-| `postpilot-approval` | Telegram approval (`ppTelegramApprov`) | after the safety check, and after each redraft (if Telegram is on) | `draftId, text, flags, mediaType, mediaPath` |
+| `postpilot-approval` | Telegram approval (`ppTelegramApprov`) | after the safety check, and after each redraft (if Telegram is on), once per ID in `TELEGRAM_CHAT_ID` | `draftId, chatId, text, flags, mediaType, mediaPath` |
 | `postpilot-publish` | Publish (`ppPublishPost001`) | `publishDraft()` | `postId, platform, text, mock, scheduledAt/scheduledUnix, mediaType, mediaPath, videoBytes` |
 | `postpilot-report` | Weekly report (`ppWeeklyReport01`) | *Generate weekly report* button (also a Monday 08:00 cron inside n8n) | `trigger` |
 
@@ -93,7 +93,7 @@ generating ──(safety done/failed)──► awaiting_approval ──(all late
 **Redraft:** same draft → validate → retry → safety pattern for a single platform, with the reviewer's reason in the prompt. The result arrives as step `redraft_<platform>`.
 
 **Telegram approval:**
-1. Sends the media (`sendPhoto` / `sendVideo`).
+1. Sends the media (`sendPhoto` / `sendVideo`) to the `chatId` in the payload. With several IDs, the app starts one execution per person, because a *Send and wait* node waits for a single chat. The first decision wins in the app.
 2. A *Send and wait* node pauses the execution until a button is pressed (max 2 h). The execution shows as *Waiting*, and Telegram's button calls n8n's public `N8N_WEBHOOK_URL`.
 3. The decision goes to `/api/internal/decisions`, and the reply message says whether it arrived in time.
 
@@ -105,7 +105,7 @@ generating ──(safety done/failed)──► awaiting_approval ──(all late
   - Video: `videos?action=initializeUpload` gives one upload URL per ~4 MB part. Each part is fetched from the app with an HTTP `Range` header, PUT to LinkedIn, and its ETag collected. Then `finalizeUpload`, then poll `/rest/videos/{urn}` until `AVAILABLE`, then `/rest/posts`.
 - Every branch ends in `/api/internal/posts/:id`.
 
-**Weekly report:** cron or webhook → `/api/internal/report-data` → Facebook Graph stats for real posts (mock posts carry simulated engagement) → LLM writes the report → saved in the app → optionally sent to Telegram.
+**Weekly report:** cron or webhook → `/api/internal/report-data` → Facebook Graph stats for real posts (mock posts carry simulated engagement) → LLM writes the report → saved in the app → optionally sent to Telegram (one message per ID in `TELEGRAM_CHAT_ID`).
 
 ## 6. Media pipeline in the app
 

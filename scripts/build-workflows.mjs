@@ -489,28 +489,30 @@ function telegramApproval() {
     // Older app versions only sent imagePath
     const mediaPath = d.mediaPath ?? d.imagePath ?? null;
     const isVideo = d.mediaType === "video";
-    return { json: { ...d, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + " post " + (isVideo ? "video" : "image") + " (draft v" + d.version + ")" } };
+    // The app sends one request per person; older app versions sent none, so use the first ID
+    const chatId = String(d.chatId ?? $env.TELEGRAM_CHAT_ID ?? "").split(",")[0].trim();
+    return { json: { ...d, chatId, label, mediaPath, isVideo, message: message.slice(0, 3900), caption: label + " post " + (isVideo ? "video" : "image") + " (draft v" + d.version + ")" } };
   }, [440, 300]);
   w.if("Has an image or video?", "{{ !!$json.mediaPath }}", [660, 300]);
   w.http("Download media from app", { method: "GET", headers: [SECRET_HEADER], url: "={{ $env.APP_INTERNAL_URL }}{{ $json.mediaPath }}", file: true, timeout: 120000, continueOnFail: true }, [880, 160]);
   w.if("Is it a video?", "{{ $('Write the Telegram message').item.json.isVideo }}", [1000, 0]);
   w.add("Send video to Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendVideo",
-    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
+    chatId: "={{ $('Write the Telegram message').item.json.chatId }}",
     binaryData: true,
     binaryPropertyName: "data",
     additionalFields: { caption: "={{ $('Write the Telegram message').item.json.caption }}" },
   }, [1100, -100], { credentials: TELEGRAM, onError: "continueRegularOutput" });
   w.add("Send image to Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendPhoto",
-    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
+    chatId: "={{ $('Write the Telegram message').item.json.chatId }}",
     binaryData: true,
     binaryPropertyName: "data",
     additionalFields: { caption: "={{ $('Write the Telegram message').item.json.caption }}" },
   }, [1100, 160], { credentials: TELEGRAM, onError: "continueRegularOutput" });
   w.add("Ask for approval on Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendAndWait",
-    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
+    chatId: "={{ $('Write the Telegram message').item.json.chatId }}",
     message: "={{ $('Write the Telegram message').item.json.message }}",
     approvalOptions: { values: { approvalType: "double", approveLabel: "✅ Approve", disapproveLabel: "❌ Reject" } },
     options: { limitWaitTime: { values: { limitType: "afterTimeInterval", resumeAmount: 2, resumeUnit: "hours" } }, appendAttribution: false },
@@ -533,7 +535,7 @@ function telegramApproval() {
   w.app("Tell app the decision", "/api/internal/decisions", "{ draftId: $json.draftId, decision: $json.decision, reason: $json.reason, source: 'telegram' }", [1980, 300]);
   w.add("Confirm on Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendMessage",
-    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
+    chatId: "={{ $('Write the Telegram message').item.json.chatId }}",
     text: "={{ $json.accepted ? ($('Read the decision').item.json.decision === 'approve' ? '✅ Approved. PostPilot will take it from here.' : '↩️ Rejected. The agent is writing a new version.') : 'ℹ️ Too late: this draft was already decided in the app (' + $json.existing + ').' }}",
     additionalFields: { appendAttribution: false },
   }, [2200, 300], { credentials: TELEGRAM, onError: "continueRegularOutput" });
@@ -843,14 +845,19 @@ function weeklyReport() {
   }, [1980, 300], "runOnceForEachItem", [readJsonHelper]);
   w.app("Save report in app", "/api/internal/reports", "{ title: $json.title, text: $json.text, numbers: $json.numbers, periodStart: $json.periodStart, periodEnd: $json.periodEnd, cost: $json.cost }", [2200, 300]);
   w.if("Telegram on?", "{{ $('Read the report').item.json.telegram }}", [2420, 300]);
+  w.code("One message per person", function () {
+    // TELEGRAM_CHAT_ID can list several people, separated by commas
+    return String($env.TELEGRAM_CHAT_ID ?? "").split(/[\s,]+/).filter(Boolean).map((chatId) => ({ json: { chatId } }));
+  }, [2640, 220]);
   w.add("Send report to Telegram", "n8n-nodes-base.telegram", 1.2, {
     operation: "sendMessage",
-    chatId: "={{ $env.TELEGRAM_CHAT_ID }}",
-    text: "=📊 {{ $('Read the report').item.json.title }}\n\n{{ $('Read the report').item.json.text }}",
+    chatId: "={{ $json.chatId }}",
+    text: "=📊 {{ $('Read the report').first().json.title }}\n\n{{ $('Read the report').first().json.text }}",
     additionalFields: { appendAttribution: false },
-  }, [2640, 220], { credentials: TELEGRAM, onError: "continueRegularOutput" });
+  }, [2860, 220], { credentials: TELEGRAM, onError: "continueRegularOutput" });
   w.chain("Combine all numbers", "Load prompts", "Write report with AI", "Read the report", "Save report in app", "Telegram on?");
-  w.connect("Telegram on?", "Send report to Telegram", 0);
+  w.connect("Telegram on?", "One message per person", 0);
+  w.chain("One message per person", "Send report to Telegram");
   return w;
 }
 

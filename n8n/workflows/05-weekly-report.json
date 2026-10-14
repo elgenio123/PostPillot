@@ -346,9 +346,23 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// TELEGRAM_CHAT_ID can list several people, separated by commas\nreturn String($env.TELEGRAM_CHAT_ID ?? \"\").split(/[\\s,]+/).filter(Boolean).map((chatId) => ({ json: { chatId } }));"
+      },
+      "id": "0a7e5249-32fc-2069-2aba-be21e4e6743f",
+      "name": "One message per person",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        220
+      ]
+    },
+    {
+      "parameters": {
         "operation": "sendMessage",
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
-        "text": "=📊 {{ $('Read the report').item.json.title }}\n\n{{ $('Read the report').item.json.text }}",
+        "chatId": "={{ $json.chatId }}",
+        "text": "=📊 {{ $('Read the report').first().json.title }}\n\n{{ $('Read the report').first().json.text }}",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -358,7 +372,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2640,
+        2860,
         220
       ],
       "credentials": {
@@ -511,6 +525,17 @@
       ]
     },
     "Telegram on?": {
+      "main": [
+        [
+          {
+            "node": "One message per person",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One message per person": {
       "main": [
         [
           {

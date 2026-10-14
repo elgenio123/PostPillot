@@ -71,7 +71,7 @@ export default function BriefPage() {
             <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary-soft px-3 py-1 text-sm font-bold text-primary">
               <Sparkles className="size-4" /> Step 1 · Brief the agent
             </p>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl md:text-5xl">What is happening at your school?</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl md:text-5xl">What do you want to promote?</h1>
             <p className="mt-2 max-w-2xl text-base text-muted-foreground sm:text-lg">Describe the event in one paragraph. The agent will draft the posts and an image, and you stay the pilot.</p>
           </div>
           <Menu>

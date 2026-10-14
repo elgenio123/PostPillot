@@ -95,6 +95,21 @@ describe("run lifecycle", () => {
   });
 });
 
+describe("telegram", () => {
+  it("asks every person listed in TELEGRAM_CHAT_ID for approval", async () => {
+    vi.stubEnv("TELEGRAM_CHAT_ID", "111, 222");
+    await settings({ telegram: true, trap: false });
+    const id = await newRun(["facebook"]);
+    await event(id, { step: "draft_facebook", status: "done", data: { text: "Join us on Friday 14 November!", hashtags: [] } });
+    await event(id, { step: "safety", status: "done", data: { drafts: [] } });
+    const asks = webhookCalls.filter((c) => c.path === "postpilot-approval");
+    expect(asks.map((c) => c.body.chatId)).toEqual(["111", "222"]);
+    expect(asks[0].body.draftId).toBe(asks[1].body.draftId);
+    await settings({ telegram: false });
+    vi.unstubAllEnvs();
+  });
+});
+
 describe("decisions", () => {
   it("accept the first decision and ignore the later one", async () => {
     const id = await newRun();
